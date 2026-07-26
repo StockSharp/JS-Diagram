@@ -416,8 +416,9 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             overviewViewportFill,
         } = options;
         if (diagramBackground !== undefined) {
+            // Only the mount point is ours to paint. The element around it belongs to the embedding page,
+            // whose own styling decides what shows behind the diagram.
             this.div.style.background = diagramBackground;
-            if (this.div.parentElement !== null) this.div.parentElement.style.background = diagramBackground;
         }
         if (this.overviewContainer !== null && overviewBackground !== undefined) {
             this.overviewContainer.style.background = overviewBackground;

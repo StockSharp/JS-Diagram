@@ -316,3 +316,20 @@ test('a stale source failure cannot replace a newer successful render with an er
 
     newer!.destroy();
 });
+
+test('theming paints the host only, never the element it was mounted into', async () => {
+    installDom(async () => paletteResponse());
+    const page = new FakeHost();
+    const host = new FakeHost();
+    host.parentElement = page;
+
+    const handle = await renderScheme(host as unknown as HTMLElement, '/palette.json', emptyScheme);
+    assert.notEqual(handle, null);
+
+    // The host carries the diagram background; the surrounding page keeps whatever it had. Reaching one
+    // level up would repaint arbitrary page content -- on a docs page it spilled over the whole article.
+    assert.equal(host.style.background, '#1b1b1f');
+    assert.equal(page.style.background, undefined);
+
+    handle!.destroy();
+});
