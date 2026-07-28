@@ -32,6 +32,7 @@ import type {
     DiagramClipboard,
     ContextCommand,
     DiagramLoadOptions,
+    DiagramFullscreenLabels,
     DiagramGridSettings,
     DiagramNodeBounds,
     DiagramPoint,
@@ -75,6 +76,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private destroyed = false;
     private fullscreen = false;
     private fullscreenButtonVisible = true;
+    private fullscreenLabels: DiagramFullscreenLabels = { enter: 'Enter fullscreen', exit: 'Exit fullscreen' };
     private linkValidator: LinkValidator | null = null;
     private readonly contextActions = new DiagramActionRegistry<ContextCommand, ContextActionContext>();
 
@@ -92,6 +94,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             gridSize: options.gridSize,
         });
         this.fullscreenButtonVisible = options.showFullscreenButton ?? true;
+        this.fullscreenLabels = options.fullscreenLabels ?? this.fullscreenLabels;
         this.prepareFullscreenButtonHost();
         this.fullscreenButton = this.createFullscreenButton();
         this.updateFullscreenButton();
@@ -396,6 +399,16 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return this.fullscreenButtonVisible;
     }
 
+    /** Text of the fullscreen button, for a host that renders in another language. */
+    setFullscreenLabels(labels: DiagramFullscreenLabels): void {
+        this.fullscreenLabels = labels;
+        this.updateFullscreenButton();
+    }
+
+    getFullscreenLabels(): DiagramFullscreenLabels {
+        return { ...this.fullscreenLabels };
+    }
+
     /** Updates only the control's state after the host changed its own layout. */
     setFullscreenState(fullscreen: boolean): void {
         if (this.fullscreen === fullscreen) return;
@@ -625,7 +638,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 
     private updateFullscreenButton(): void {
         const fullscreen = this.fullscreen;
-        const label = fullscreen ? 'Exit fullscreen' : 'Enter fullscreen';
+        const label = fullscreen ? this.fullscreenLabels.exit : this.fullscreenLabels.enter;
         const path = fullscreen
             ? 'M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5'
             : 'M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5';

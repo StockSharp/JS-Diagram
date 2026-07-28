@@ -6,11 +6,19 @@ import type {
 } from '../core/state.js';
 import type { DiagramNode, Link, Port, PortDirection } from './types.js';
 
+/** What the fullscreen button calls itself, in the host page's language. */
+export interface DiagramFullscreenLabels {
+    enter: string;
+    exit: string;
+}
+
 export interface DiagramOptions {
     div: HTMLElement;
     catalog: import('./catalog.js').StockSharpCatalog;
     /** Show the built-in top-right fullscreen request button. Defaults to true. */
     showFullscreenButton?: boolean;
+    /** Tooltip/aria text for that button. Defaults to English. */
+    fullscreenLabels?: DiagramFullscreenLabels;
     overviewContainer?: HTMLElement | null;
     zoomLabel?: HTMLElement | null;
     /** Optional system clipboard adapter. Pass null to force memory-only clipboard. */

@@ -1292,6 +1292,34 @@ test('fullscreen button requests host layout changes and reflects acknowledged s
     assert.equal(host.style.position, previousPosition);
 });
 
+test('the fullscreen button speaks the language the host asked for', async () => {
+    // The only text the control shows a reader. A host that renders in another language has to be able
+    // to say so, or an otherwise translated page carries one English tooltip.
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+        fullscreenLabels: { enter: 'Развернуть', exit: 'Свернуть' },
+    });
+
+    const button = host.button!;
+    assert.equal(button.getAttribute('aria-label'), 'Развернуть');
+
+    diagram.setFullscreenState(true);
+    assert.equal(button.getAttribute('aria-label'), 'Свернуть');
+
+    // Changed after the fact -- a page that switches language without reloading.
+    diagram.setFullscreenLabels({ enter: 'Enter fullscreen', exit: 'Exit fullscreen' });
+    assert.equal(button.getAttribute('aria-label'), 'Exit fullscreen');
+
+    diagram.setFullscreenState(false);
+    assert.equal(button.getAttribute('aria-label'), 'Enter fullscreen');
+
+    diagram.destroy();
+});
+
 test('high-level move and zoom methods update the real canvas state', async () => {
     installDom();
     const {

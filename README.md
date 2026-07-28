@@ -153,6 +153,18 @@ node is rendered as a transient red placeholder whose hover tooltip names the
 missing type. Sites can localize that message through
 `data-diagram-missing-element="Missing: {typeId}"` on the host.
 
+Every text the embedded control shows comes from the host, so a translated page
+carries no English leftovers:
+
+| Host attribute | What it renames |
+|---|---|
+| `data-diagram-fullscreen="Enter\|Exit"` | the fullscreen button's tooltip, collapsed and expanded |
+| `data-diagram-errors="Load\|Empty\|Draw"` | the three failure notes shown in place of a diagram |
+| `data-diagram-missing-element="Missing: {typeId}"` | the placeholder for an element the palette lacks |
+
+The same labels are available to custom integrations as the `fullscreenLabels`
+option and `setFullscreenLabels()` on `StockSharpDiagram`.
+
 ### Node actions and errors
 
 Double-click handling is opt-in. Give only the node types controlled by the

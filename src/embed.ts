@@ -245,9 +245,17 @@ async function renderSchemeAtRevision(
 	disposeActiveRender(div);
 	div.classList.remove('ss-diagram-error');
 	div.replaceChildren();
+	// The host page passes its wording the same way it passes the error texts: through the dataset,
+	// "enter|exit". Left out, the button keeps its English defaults.
+	const [enterLabel, exitLabel] = (div.dataset.diagramFullscreen ?? '').split('|');
+
 	let diagram: StockSharpDiagram;
 	try {
-		diagram = new StockSharpDiagram({ div, catalog });
+		diagram = new StockSharpDiagram({
+			div,
+			catalog,
+			...(enterLabel && exitLabel ? { fullscreenLabels: { enter: enterLabel, exit: exitLabel } } : {}),
+		});
 	} catch (error) {
 		div.replaceChildren();
 		throw error;

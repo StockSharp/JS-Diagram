@@ -616,11 +616,18 @@ export declare function serializeDiagramViewState(view: DiagramViewState, space?
 import type { DiagramDocument } from '../core/model.js';
 import type { DiagramRuntimeState, DiagramSelection, DiagramViewState } from '../core/state.js';
 import type { DiagramNode, Link, Port, PortDirection } from './types.js';
+/** What the fullscreen button calls itself, in the host page's language. */
+export interface DiagramFullscreenLabels {
+    enter: string;
+    exit: string;
+}
 export interface DiagramOptions {
     div: HTMLElement;
     catalog: import('./catalog.js').StockSharpCatalog;
     /** Show the built-in top-right fullscreen request button. Defaults to true. */
     showFullscreenButton?: boolean;
+    /** Tooltip/aria text for that button. Defaults to English. */
+    fullscreenLabels?: DiagramFullscreenLabels;
     overviewContainer?: HTMLElement | null;
     zoomLabel?: HTMLElement | null;
     /** Optional system clipboard adapter. Pass null to force memory-only clipboard. */
@@ -907,7 +914,7 @@ export declare class StockSharpPalette extends EventEmitter<PaletteEvents> {
 import type { DiagramDocument } from '../core/model.js';
 import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramViewState } from '../core/state.js';
 import { EventEmitter } from './event-emitter.js';
-import type { DiagramEvents, ContextCommand, DiagramLoadOptions, DiagramGridSettings, DiagramNodeBounds, DiagramPoint, DiagramOptions, DiagramScreenshotOptions, DiagramThemeOptions, LinkValidationResult, LinkValidator, NodeErrorKind, NodeErrorOptions } from './api.js';
+import type { DiagramEvents, ContextCommand, DiagramLoadOptions, DiagramFullscreenLabels, DiagramGridSettings, DiagramNodeBounds, DiagramPoint, DiagramOptions, DiagramScreenshotOptions, DiagramThemeOptions, LinkValidationResult, LinkValidator, NodeErrorKind, NodeErrorOptions } from './api.js';
 import { DiagramNode, Link, Port, type PortDirection, type PortUpdate } from './types.js';
 export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     constructor(options: DiagramOptions);
@@ -993,6 +1000,9 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     isFullscreen(): boolean;
     setFullscreenButtonVisible(visible: boolean): void;
     isFullscreenButtonVisible(): boolean;
+    /** Text of the fullscreen button, for a host that renders in another language. */
+    setFullscreenLabels(labels: DiagramFullscreenLabels): void;
+    getFullscreenLabels(): DiagramFullscreenLabels;
     /** Updates only the control's state after the host changed its own layout. */
     setFullscreenState(fullscreen: boolean): void;
     setTheme(options: DiagramThemeOptions): void;
