@@ -188,7 +188,7 @@ function installDom(fetchImpl: typeof fetch): void {
 }
 
 function paletteResponse(): Response {
-    return { json: async () => palette } as Response;
+    return { ok: true, json: async () => palette } as Response;
 }
 
 test('embed rendering replaces and disposes every resource owned by a host', async () => {
@@ -332,4 +332,98 @@ test('theming paints the host only, never the element it was mounted into', asyn
     assert.equal(page.style.background, undefined);
 
     handle!.destroy();
+});
+
+test('a scheme whose Nodes or Links is not an array degrades to a note instead of throwing', async () => {
+    // A .NET dictionary serializer emits {} for an empty map, so a non-array here
+    // is a realistic document rather than a hand-crafted hostile one.
+    const render = async (model: unknown) => {
+        const raw = JSON.stringify({ Content: { Value: { Scheme: { Model: model } } } });
+        installDom((input) => String(input) === '/palette.json'
+            ? Promise.resolve(paletteResponse())
+            : Promise.resolve({ ok: true, text: async () => raw } as Response));
+        const host = new FakeHost();
+        host.dataset.diagramErrors = 'load failed|empty diagram|draw failed';
+        const handle = await renderFromSource(host as unknown as HTMLElement, '/palette.json', '/src.json');
+        return { host, handle };
+    };
+
+    for (const model of [{ Nodes: {}, Links: [] }, { Nodes: 'nope', Links: null }]) {
+        const { host, handle } = await render(model);
+        assert.equal(handle, null);
+        assert.equal(host.textContent, 'empty diagram');
+    }
+
+    // Readable nodes still render even when the links are unusable.
+    const partial = await render({ Nodes: [{ Key: 'node', TypeId: 'x', X: 0, Y: 0 }], Links: 7 });
+    assert.notEqual(partial.handle, null);
+    const saved = partial.handle!.diagram.save();
+    assert.equal(saved.nodes.length, 1);
+    assert.equal(saved.links.length, 0);
+    partial.handle!.destroy();
+});
+
+test('a malformed palette body yields an empty catalog instead of crashing the render', async () => {
+    for (const body of [null, {}, [], { socketTypes: 'no', elements: 3 }]) {
+        installDom(async () => ({ ok: true, json: async () => body } as Response));
+        const host = new FakeHost();
+
+        const handle = await renderScheme(host as unknown as HTMLElement, '/palette.json', {
+            nodes: [{ id: 'n1', typeId: 'unknown-type', name: 'Node', x: 0, y: 0 }],
+            links: [],
+        });
+
+        assert.notEqual(handle, null);
+        assert.equal(handle!.diagram.save().nodes[0].isPlaceholder, true);
+        handle!.destroy();
+    }
+});
+
+test('malformed palette entries are skipped, readable ones still load', async () => {
+    installDom(async () => ({
+        ok: true,
+        json: async () => ({
+            socketTypes: [null, { name: 'Candle', color: '#fff' }, { name: 7, color: '#000' }],
+            elements: [
+                'nonsense',
+                { typeId: 'good', name: 'Good', groupName: 'G', icon: '', inPorts: [{ key: 'in', name: 'In', type: 'Candle' }], outPorts: [] },
+                { typeId: 'no-ports', name: 'No ports', groupName: 'G', icon: '', inPorts: 'bad', outPorts: null },
+            ],
+        }),
+    } as Response));
+    const host = new FakeHost();
+
+    const handle = await renderScheme(host as unknown as HTMLElement, '/palette.json', {
+        nodes: [
+            { id: 'a', typeId: 'good', name: 'A', x: 0, y: 0 },
+            { id: 'b', typeId: 'no-ports', name: 'B', x: 0, y: 0 },
+        ],
+        links: [],
+    });
+
+    assert.notEqual(handle, null);
+    const saved = handle!.diagram.save();
+    assert.equal(saved.nodes[0].isPlaceholder, false);
+    assert.equal(saved.nodes[0].inPorts.length, 1);
+    assert.equal(saved.nodes[1].isPlaceholder, false);
+    assert.equal(saved.nodes[1].inPorts.length, 0);
+    handle!.destroy();
+});
+
+test('a palette URL that answers with an error status degrades to a note', async () => {
+    installDom((input) => String(input) === '/palette.json'
+        ? Promise.resolve({ ok: false, json: async () => ({}) } as Response)
+        : Promise.resolve({
+            ok: true,
+            text: async () => JSON.stringify({ Content: { Value: { Scheme: { Model: {
+                Nodes: [{ Key: 'node', TypeId: 'x', X: 0, Y: 0 }], Links: [],
+            } } } } }),
+        } as Response));
+    const host = new FakeHost();
+    host.dataset.diagramErrors = 'load failed|empty diagram|draw failed';
+
+    const handle = await renderFromSource(host as unknown as HTMLElement, '/palette.json', '/src.json');
+
+    assert.equal(handle, null);
+    assert.equal(host.textContent, 'draw failed');
 });

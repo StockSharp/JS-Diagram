@@ -166,57 +166,134 @@ function toDiagramNodes(
 // Walk the persisted Content.Value.Scheme.Model.{Nodes,Links} structure into
 // the thin scheme. Defensive at every field so a partially
 // broken document yields as many nodes as are readable; a wholly unusable one yields an empty scheme.
+// Every reader below narrows rather than asserts: the input is arbitrary JSON
+// from a URL or an inline <script>, so a type assertion here would only be a
+// promise the data never made. Anything unreadable is skipped, never thrown on.
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+	return isRecord(value) ? value : undefined;
+}
+
+function asArray(value: unknown): unknown[] {
+	return Array.isArray(value) ? value : [];
+}
+
+function asString(value: unknown): string {
+	return typeof value === 'string' ? value : '';
+}
+
+function asFiniteNumber(value: unknown): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
 function nodeName(node: Record<string, unknown>): string {
-	const settings = node?.Settings as Record<string, unknown> | undefined;
-	const parameters = settings?.Parameters as Record<string, unknown> | undefined;
-	const nameParam = parameters?.Name as Record<string, unknown> | undefined;
-	const nameVal = nameParam?.Value;
-	if (typeof nameVal === 'string' && nameVal.length > 0)
-		return nameVal;
-	if (typeof node?.Figure === 'string' && (node.Figure as string).length > 0)
-		return node.Figure as string;
-	return typeof node?.Key === 'string' ? node.Key as string : '';
+	const named = asRecord(asRecord(asRecord(node.Settings)?.Parameters)?.Name)?.Value;
+	if (typeof named === 'string' && named.length > 0)
+		return named;
+	const figure = asString(node.Figure);
+	return figure.length > 0 ? figure : asString(node.Key);
 }
 
 function parseRawScheme(raw: unknown): DiagramEmbedScheme {
 	const nodes: DiagramEmbedSchemeNode[] = [];
 	const links: DiagramEmbedSchemeLink[] = [];
 
-	const root = raw as Record<string, unknown>;
-	const content = root?.Content as Record<string, unknown> | undefined;
-	const value = content?.Value as Record<string, unknown> | undefined;
-	const scheme = value?.Scheme as Record<string, unknown> | undefined;
-	const model = scheme?.Model as Record<string, unknown> | undefined;
-	if (!model)
+	const model = asRecord(asRecord(asRecord(asRecord(raw)?.Content)?.Value)?.Scheme)?.Model;
+	const fields = asRecord(model);
+	if (fields === undefined)
 		return { nodes, links };
 
-	for (const raw of (model.Nodes as Record<string, unknown>[] ?? [])) {
-		const key = raw?.Key;
+	for (const entry of asArray(fields.Nodes)) {
+		const node = asRecord(entry);
+		if (node === undefined)
+			continue;
+		const key = node.Key;
 		if (typeof key !== 'string' || key.length === 0)
 			continue;
 		nodes.push({
 			id: key,
-			typeId: typeof raw.TypeId === 'string' ? raw.TypeId : '',
-			name: nodeName(raw),
-			x: typeof raw.X === 'number' ? raw.X : 0,
-			y: typeof raw.Y === 'number' ? raw.Y : 0,
+			typeId: asString(node.TypeId),
+			name: nodeName(node),
+			x: asFiniteNumber(node.X),
+			y: asFiniteNumber(node.Y),
 		});
 	}
 
-	for (const raw of (model.Links as Record<string, unknown>[] ?? [])) {
-		const from = raw?.From;
-		const to = raw?.To;
+	for (const entry of asArray(fields.Links)) {
+		const link = asRecord(entry);
+		if (link === undefined)
+			continue;
+		const from = link.From;
+		const to = link.To;
 		if (typeof from !== 'string' || typeof to !== 'string')
 			continue;
 		links.push({
 			from,
-			fromPort: typeof raw.FromPort === 'string' ? raw.FromPort : '',
+			fromPort: asString(link.FromPort),
 			to,
-			toPort: typeof raw.ToPort === 'string' ? raw.ToPort : '',
+			toPort: asString(link.ToPort),
 		});
 	}
 
 	return { nodes, links };
+}
+
+function parsePalettePorts(value: unknown): PalettePort[] {
+	const ports: PalettePort[] = [];
+	for (const entry of asArray(value)) {
+		const port = asRecord(entry);
+		if (port === undefined)
+			continue;
+		const key = asString(port.key);
+		if (key.length === 0)
+			continue;
+		ports.push({
+			key,
+			name: asString(port.name),
+			type: asString(port.type),
+			maxLinks: asFiniteNumber(port.maxLinks),
+			availableTypes: asArray(port.availableTypes).filter((item): item is string => typeof item === 'string'),
+			isDynamic: port.isDynamic === true,
+			dynamicMode: asString(port.dynamicMode),
+		});
+	}
+	return ports;
+}
+
+function parsePalette(value: unknown): Palette {
+	const socketTypes: Palette['socketTypes'] = [];
+	const elements: PaletteElement[] = [];
+	const root = asRecord(value);
+	if (root === undefined)
+		return { socketTypes, elements };
+
+	for (const entry of asArray(root.socketTypes)) {
+		const socket = asRecord(entry);
+		const name = asString(socket?.name);
+		if (name.length === 0)
+			continue;
+		socketTypes.push({ name, color: asString(socket?.color) });
+	}
+
+	for (const entry of asArray(root.elements)) {
+		const element = asRecord(entry);
+		const typeId = asString(element?.typeId);
+		if (element === undefined || typeId.length === 0)
+			continue;
+		elements.push({
+			typeId,
+			name: asString(element.name),
+			groupName: asString(element.groupName),
+			icon: asString(element.icon),
+			inPorts: parsePalettePorts(element.inPorts),
+			outPorts: parsePalettePorts(element.outPorts),
+		});
+	}
+
+	return { socketTypes, elements };
 }
 
 export async function renderScheme(
@@ -237,7 +314,12 @@ async function renderSchemeAtRevision(
 ): Promise<DiagramEmbedHandle | null> {
 	if (renderRevisions.get(div) !== revision)
 		return null;
-	const palette = (await fetch(paletteUrl).then((r) => r.json())) as Palette;
+	// Same treatment the schema fetch gets: a non-2xx answer is a failure, not a
+	// body to parse. Callers that degrade already catch it.
+	const response = await fetch(paletteUrl);
+	if (!response.ok)
+		throw new Error(`Palette request to ${paletteUrl} failed with status ${response.status}.`);
+	const palette = parsePalette(await response.json());
 	if (renderRevisions.get(div) !== revision)
 		return null;
 	const catalog = buildCatalog(palette);
