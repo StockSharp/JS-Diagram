@@ -427,3 +427,30 @@ test('a palette URL that answers with an error status degrades to a note', async
     assert.equal(handle, null);
     assert.equal(host.textContent, 'draw failed');
 });
+
+test('a host that sets no error texts still gets the built-in ones', async () => {
+    // "".split("|") is [""], not [], so a destructuring default never fires here:
+    // the slots have to fall back on emptiness, not on absence.
+    installDom(async () => ({ ok: false } as Response));
+    const host = new FakeHost();
+
+    assert.equal(await renderFromSource(host as unknown as HTMLElement, '/palette.json', '/src.json'), null);
+    assert.equal(host.textContent, 'Diagram source could not be loaded.');
+
+    // A partial override keeps the built-in text for the slots it omits.
+    installDom(async () => ({ ok: false } as Response));
+    const partial = new FakeHost();
+    partial.dataset.diagramErrors = 'Не удалось загрузить схему.';
+
+    assert.equal(await renderFromSource(partial as unknown as HTMLElement, '/palette.json', '/src.json'), null);
+    assert.equal(partial.textContent, 'Не удалось загрузить схему.');
+
+    installDom((input) => String(input) === '/palette.json'
+        ? Promise.resolve(paletteResponse())
+        : Promise.resolve({ ok: true, text: async () => '{}' } as Response));
+    const empty = new FakeHost();
+    empty.dataset.diagramErrors = 'Не удалось загрузить схему.';
+
+    assert.equal(await renderFromSource(empty as unknown as HTMLElement, '/palette.json', '/src.json'), null);
+    assert.equal(empty.textContent, 'Diagram is empty or malformed.');
+});

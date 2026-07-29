@@ -494,6 +494,25 @@ function stopDisconnectedHostObserverWhenIdle(): void {
 	disconnectedHostObserver = null;
 }
 
+interface EmbedErrorTexts {
+	load: string;
+	empty: string;
+	draw: string;
+}
+
+// The host overrides the inline notes with data-diagram-errors="load|empty|draw".
+// Each slot falls back when it is empty rather than when it is absent: split on a
+// missing attribute yields [''], one present empty string, so a destructuring
+// default would never fire and the note would render blank.
+function errorTexts(div: HTMLElement): EmbedErrorTexts {
+	const parts = (div.dataset.diagramErrors ?? '').split('|');
+	return {
+		load: parts[0] || 'Diagram source could not be loaded.',
+		empty: parts[1] || 'Diagram is empty or malformed.',
+		draw: parts[2] || 'Diagram could not be rendered.',
+	};
+}
+
 function note(div: HTMLElement, message: string, revision: number): void {
 	if (renderRevisions.get(div) !== revision) return;
 	disposeActiveRender(div);
@@ -511,30 +530,29 @@ export async function renderFromSource(
 	options: DiagramEmbedOptions = {},
 ): Promise<DiagramEmbedHandle | null> {
 	const revision = beginRender(div);
-	const errors = (div.dataset.diagramErrors ?? '').split('|');
-	const [errLoad = 'Diagram source could not be loaded.', errEmpty = 'Diagram is empty or malformed.', errDraw = 'Diagram could not be rendered.'] = errors;
+	const errors = errorTexts(div);
 
 	let raw: unknown;
 	try {
 		const resp = await fetch(srcUrl);
-		if (!resp.ok) { note(div, errLoad, revision); return null; }
+		if (!resp.ok) { note(div, errors.load, revision); return null; }
 		const text = (await resp.text()).replace(/^﻿/, '');
 		raw = JSON.parse(text);
 	} catch {
-		note(div, errLoad, revision);
+		note(div, errors.load, revision);
 		return null;
 	}
 
 	const scheme = parseRawScheme(raw);
 	if (scheme.nodes.length === 0) {
-		note(div, errEmpty, revision);
+		note(div, errors.empty, revision);
 		return null;
 	}
 
 	try {
 		return await renderSchemeAtRevision(div, paletteUrl, scheme, revision, options);
 	} catch {
-		note(div, errDraw, revision);
+		note(div, errors.draw, revision);
 		return null;
 	}
 }
@@ -549,27 +567,26 @@ export async function renderFromInline(
 	options: DiagramEmbedOptions = {},
 ): Promise<DiagramEmbedHandle | null> {
 	const revision = beginRender(div);
-	const errors = (div.dataset.diagramErrors ?? '').split('|');
-	const [, errEmpty = 'Diagram is empty or malformed.', errDraw = 'Diagram could not be rendered.'] = errors;
+	const errors = errorTexts(div);
 
 	let raw: unknown;
 	try {
 		raw = JSON.parse(json);
 	} catch {
-		note(div, errEmpty, revision);
+		note(div, errors.empty, revision);
 		return null;
 	}
 
 	const scheme = parseRawScheme(raw);
 	if (scheme.nodes.length === 0) {
-		note(div, errEmpty, revision);
+		note(div, errors.empty, revision);
 		return null;
 	}
 
 	try {
 		return await renderSchemeAtRevision(div, paletteUrl, scheme, revision, options);
 	} catch {
-		note(div, errDraw, revision);
+		note(div, errors.draw, revision);
 		return null;
 	}
 }
