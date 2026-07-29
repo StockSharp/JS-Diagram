@@ -3,12 +3,14 @@ import test from 'node:test';
 
 import {
     DiagramDocumentError,
+    type DiagramDocumentInput,
     cloneDiagramDocument,
     createDiagramDocument,
     parseDiagramDocument,
     serializeDiagramDocument,
 } from '../src/core/document';
 import { DIAGRAM_DOCUMENT_VERSION, type JsonObject } from '../src/core/model';
+import { DiagramNode, Port } from '../src/diagram/types';
 import {
     cloneDiagramRuntimeState,
     createDiagramNodeRuntimeState,
@@ -220,4 +222,65 @@ test('a nested "__proto__" key is preserved instead of being silently dropped', 
     assert.equal(Object.getPrototypeOf(inner), Object.prototype);
     assert.deepEqual(Object.keys(inner).sort(), ['__proto__', 'kept']);
     assert.deepEqual(parseDiagramDocument(serializeDiagramDocument(document)), document);
+});
+
+test('host-built documents report malformed elements with a path, like parsed ones do', () => {
+    // The casts are the point: DiagramDocumentInput is a structural interface, so
+    // a JavaScript host or a `JSON.parse(...) as DiagramDocumentInput` supplies
+    // whatever it likes. A raw TypeError with no JSON path is not a usable answer.
+    const create = (input: unknown) => () => createDiagramDocument(input as DiagramDocumentInput);
+
+    assert.throws(create({ nodes: [null] }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.nodes[0]');
+    assert.throws(create({ nodes: [{ id: 'a', name: 'A' }], links: [null] }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.links[0]');
+    assert.throws(create({ nodes: 'not an array' }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.nodes');
+    assert.throws(create({ nodes: [{ id: 'a', name: 'A', inPorts: {} }] }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.nodes[0].inPorts');
+    assert.throws(create({ nodes: [{ id: 'a', name: 'A' }], links: [{ from: null, to: null }] }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.links[0].from');
+
+    // A hole is not an object either, and map() would skip it into the result.
+    assert.throws(create({ nodes: new Array(2) }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.nodes[0]');
+    assert.throws(create({ nodes: [{ id: 'a', name: 'A' }], links: new Array(2) }), (error: unknown) =>
+        error instanceof DiagramDocumentError && error.path === '$.links[0]');
+});
+
+test('the library\'s own node and port instances are accepted as document input', () => {
+    // A host builds a scheme out of DiagramNode/Port, not object literals. These
+    // are class instances, so a plain-prototype check would reject them -- but
+    // metadata still has to be plain JSON, which is a different question.
+    const port = new Port({ id: 'out', name: 'Out', type: 'Candle' });
+    const node = new DiagramNode({ id: 'a', name: 'A', outPorts: [port] });
+
+    const nodes = [node] as unknown as NonNullable<DiagramDocumentInput['nodes']>;
+    const document = createDiagramDocument({ nodes });
+    assert.equal(document.nodes[0].id, 'a');
+    assert.equal(document.nodes[0].outPorts[0].id, 'out');
+
+    assert.throws(
+        () => createDiagramDocument({ metadata: { when: new Date() } as unknown as JsonObject }),
+        /expected a JSON value/,
+    );
+});
+
+test('an absent collection is absent whether it is undefined or null', () => {
+    // Every other optional field reads through `?? []`, which treats null as
+    // absent; the element collections have to agree.
+    for (const input of [
+        { nodes: null },
+        { nodes: [{ id: 'a', name: 'A' }], links: null },
+        { nodes: [{ id: 'a', name: 'A', inPorts: null, parameters: null }] },
+    ]) {
+        const document = createDiagramDocument(input as unknown as DiagramDocumentInput);
+        assert.equal(document.nodes.length, input.nodes === null ? 0 : 1);
+    }
+
+    // A non-array that is not null is still a mistake worth reporting.
+    assert.throws(
+        () => createDiagramDocument({ nodes: 'nope' } as unknown as DiagramDocumentInput),
+        (error: unknown) => error instanceof DiagramDocumentError && error.path === '$.nodes',
+    );
 });

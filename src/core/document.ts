@@ -5,11 +5,8 @@ import {
     type DiagramDocumentEndpoint,
     type DiagramDocumentInput,
     type DiagramDocumentLink,
-    type DiagramDocumentLinkInput,
     type DiagramDocumentNode,
-    type DiagramDocumentNodeInput,
     type DiagramDocumentPort,
-    type DiagramDocumentPortInput,
     type DiagramParameterSchema,
     type JsonObject,
     type JsonValue,
@@ -41,13 +38,18 @@ export class DiagramDocumentError extends Error {
 }
 
 export function createDiagramDocument(input: DiagramDocumentInput = {}): DiagramDocument {
-    const nodes = (input.nodes ?? []).map((node, index) => normalizeNode(node, `$.nodes[${index}]`));
+    // DiagramDocumentInput is a structural interface, so its shape is a claim by
+    // the caller, not a guarantee. Elements are checked the same way parsed ones
+    // are, otherwise a malformed one surfaces as a TypeError naming no path.
+    const rawNodes = mapElements(input.nodes, '$.nodes');
+    const rawLinks = mapElements(input.links, '$.links');
+    const nodes = rawNodes.map((node, index) => normalizeNode(node, `$.nodes[${index}]`));
     const usedLinkIds = new Set<string>();
 
-    for (let index = 0; index < (input.links ?? []).length; index++) {
-        const id = input.links?.[index].id;
-        if (id === undefined) continue;
-        requireIdentifier(id, `$.links[${index}].id`);
+    for (let index = 0; index < rawLinks.length; index++) {
+        const raw = rawLinks[index].id;
+        if (raw === undefined) continue;
+        const id = requireIdentifier(raw, `$.links[${index}].id`);
         if (usedLinkIds.has(id)) {
             throw new DiagramDocumentError(`duplicate link id "${id}"`, `$.links[${index}].id`);
         }
@@ -55,12 +57,14 @@ export function createDiagramDocument(input: DiagramDocumentInput = {}): Diagram
     }
 
     let sequence = 1;
-    const links = (input.links ?? []).map((link, index) => {
+    const links = rawLinks.map((link, index) => {
         let id = link.id;
         if (id === undefined) {
-            do id = `link_${sequence++}`;
-            while (usedLinkIds.has(id));
-            usedLinkIds.add(id);
+            let generated: string;
+            do generated = `link_${sequence++}`;
+            while (usedLinkIds.has(generated));
+            usedLinkIds.add(generated);
+            id = generated;
         }
         return normalizeLink({ ...link, id }, `$.links[${index}]`);
     });
@@ -93,7 +97,7 @@ export function parseDiagramDocument(source: string | unknown): DiagramDocument 
         }
     }
 
-    const root = requireObject(value, '$');
+    const root = requireStructure(value, '$');
     const version = requireNumber(root.version, '$.version');
     if (version !== DIAGRAM_DOCUMENT_VERSION) {
         throw new DiagramDocumentError(`unsupported document version ${version}`, '$.version');
@@ -108,7 +112,8 @@ export function parseDiagramDocument(source: string | unknown): DiagramDocument 
     return document;
 }
 
-function normalizeNode(input: DiagramDocumentNodeInput, path: string): DiagramDocumentNode {
+function normalizeNode(value: unknown, path: string): DiagramDocumentNode {
+    const input = requireStructure(value, path);
     const id = requireIdentifier(input.id, `${path}.id`);
     return {
         id,
@@ -123,22 +128,27 @@ function normalizeNode(input: DiagramDocumentNodeInput, path: string): DiagramDo
         icon: requireString(input.icon ?? '', `${path}.icon`),
         message: requireString(input.message ?? '', `${path}.message`),
         openAction: requireString(input.openAction ?? '', `${path}.openAction`),
-        inPorts: (input.inPorts ?? []).map((port, index) => normalizePort(port, `${path}.inPorts[${index}]`)),
-        outPorts: (input.outPorts ?? []).map((port, index) => normalizePort(port, `${path}.outPorts[${index}]`)),
-        parameters: (input.parameters ?? []).map((parameter, index) => normalizeParameter(parameter, `${path}.parameters[${index}]`)),
+        inPorts: mapElements(input.inPorts, `${path}.inPorts`)
+            .map((port, index) => normalizePort(port, `${path}.inPorts[${index}]`)),
+        outPorts: mapElements(input.outPorts, `${path}.outPorts`)
+            .map((port, index) => normalizePort(port, `${path}.outPorts[${index}]`)),
+        parameters: mapElements(input.parameters, `${path}.parameters`)
+            .map((parameter, index) => normalizeParameter(parameter, `${path}.parameters[${index}]`)),
         paramValues: cloneStringRecord(input.paramValues ?? {}, `${path}.paramValues`),
         metadata: cloneJsonObject(input.metadata ?? {}, `${path}.metadata`),
     };
 }
 
-function normalizePort(input: DiagramDocumentPortInput, path: string): DiagramDocumentPort {
+function normalizePort(value: unknown, path: string): DiagramDocumentPort {
+    const input = requireStructure(value, path);
     return {
         id: requireIdentifier(input.id, `${path}.id`),
         name: requireString(input.name, `${path}.name`),
         description: requireString(input.description ?? '', `${path}.description`),
         type: requireString(input.type ?? '', `${path}.type`),
         maxLinks: requireNonNegativeInteger(input.maxLinks ?? 0, `${path}.maxLinks`),
-        availableTypes: (input.availableTypes ?? []).map((type, index) => requireString(type, `${path}.availableTypes[${index}]`)),
+        availableTypes: requireArray(input.availableTypes ?? [], `${path}.availableTypes`)
+            .map((type, index) => requireString(type, `${path}.availableTypes[${index}]`)),
         isDynamic: requireBoolean(input.isDynamic ?? false, `${path}.isDynamic`),
         dynamicMode: requireString(input.dynamicMode ?? '', `${path}.dynamicMode`),
         isSibling: requireBoolean(input.isSibling ?? false, `${path}.isSibling`),
@@ -146,7 +156,8 @@ function normalizePort(input: DiagramDocumentPortInput, path: string): DiagramDo
     };
 }
 
-function normalizeParameter(input: DiagramParameterSchema, path: string): DiagramParameterSchema {
+function normalizeParameter(value: unknown, path: string): DiagramParameterSchema {
+    const input = requireStructure(value, path);
     return {
         name: requireIdentifier(input.name, `${path}.name`),
         displayName: requireString(input.displayName, `${path}.displayName`),
@@ -163,7 +174,8 @@ function normalizeParameter(input: DiagramParameterSchema, path: string): Diagra
     };
 }
 
-function normalizeLink(input: DiagramDocumentLinkInput & { id: string }, path: string): DiagramDocumentLink {
+function normalizeLink(value: unknown, path: string): DiagramDocumentLink {
+    const input = requireStructure(value, path);
     return {
         id: requireIdentifier(input.id, `${path}.id`),
         from: normalizeEndpoint(input.from, `${path}.from`),
@@ -172,7 +184,8 @@ function normalizeLink(input: DiagramDocumentLinkInput & { id: string }, path: s
     };
 }
 
-function normalizeEndpoint(input: DiagramDocumentEndpoint, path: string): DiagramDocumentEndpoint {
+function normalizeEndpoint(value: unknown, path: string): DiagramDocumentEndpoint {
+    const input = requireStructure(value, path);
     return {
         nodeId: requireIdentifier(input.nodeId, `${path}.nodeId`),
         portId: requireIdentifier(input.portId, `${path}.portId`),
@@ -180,7 +193,7 @@ function normalizeEndpoint(input: DiagramDocumentEndpoint, path: string): Diagra
 }
 
 function parseNode(value: unknown, path: string): DiagramDocumentNode {
-    const node = requireObject(value, path);
+    const node = requireStructure(value, path);
     return normalizeNode({
         id: requireString(node.id, `${path}.id`),
         typeId: requireString(node.typeId, `${path}.typeId`),
@@ -203,7 +216,7 @@ function parseNode(value: unknown, path: string): DiagramDocumentNode {
 }
 
 function parsePort(value: unknown, path: string): DiagramDocumentPort {
-    const port = requireObject(value, path);
+    const port = requireStructure(value, path);
     return normalizePort({
         id: requireString(port.id, `${path}.id`),
         name: requireString(port.name, `${path}.name`),
@@ -219,7 +232,7 @@ function parsePort(value: unknown, path: string): DiagramDocumentPort {
 }
 
 function parseParameter(value: unknown, path: string): DiagramParameterSchema {
-    const parameter = requireObject(value, path);
+    const parameter = requireStructure(value, path);
     return normalizeParameter({
         name: requireString(parameter.name, `${path}.name`),
         displayName: requireString(parameter.displayName, `${path}.displayName`),
@@ -237,7 +250,7 @@ function parseParameter(value: unknown, path: string): DiagramParameterSchema {
 }
 
 function parseLink(value: unknown, path: string): DiagramDocumentLink {
-    const link = requireObject(value, path);
+    const link = requireStructure(value, path);
     return normalizeLink({
         id: requireString(link.id, `${path}.id`),
         from: parseEndpoint(link.from, `${path}.from`),
@@ -247,7 +260,7 @@ function parseLink(value: unknown, path: string): DiagramDocumentLink {
 }
 
 function parseEndpoint(value: unknown, path: string): DiagramDocumentEndpoint {
-    const endpoint = requireObject(value, path);
+    const endpoint = requireStructure(value, path);
     return {
         nodeId: requireIdentifier(endpoint.nodeId, `${path}.nodeId`),
         portId: requireIdentifier(endpoint.portId, `${path}.portId`),
@@ -334,6 +347,23 @@ function cloneJsonValue(value: unknown, path: string, ancestors: WeakSet<object>
     throw new DiagramDocumentError('expected a JSON value', path);
 }
 
+/**
+ * A container whose fields are read individually. Any object will do, including
+ * a class instance: hosts build schemes out of DiagramNode and Port, not object
+ * literals, and every field is validated on its own below.
+ */
+function requireStructure(value: unknown, path: string): Record<string, unknown> {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new DiagramDocumentError('expected an object', path);
+    }
+    return value as Record<string, unknown>;
+}
+
+/**
+ * A value that has to survive JSON round-tripping unchanged. Stricter than
+ * requireStructure on purpose: a Date or any other class instance would
+ * serialize to something the parser could not read back.
+ */
 function requireObject(value: unknown, path: string): Record<string, unknown> {
     if (!isObject(value)) throw new DiagramDocumentError('expected an object', path);
     return value;
@@ -343,6 +373,21 @@ function isObject(value: unknown): value is Record<string, unknown> {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value) as object | null;
     return prototype === Object.prototype || prototype === null;
+}
+
+/**
+ * Reads an optional array of objects, rejecting a non-array, a hole or a
+ * non-object element. null counts as absent, like the `?? []` every other
+ * optional field is read through.
+ */
+function mapElements(value: unknown, path: string): Record<string, unknown>[] {
+    if (value === undefined || value === null) return [];
+    // Array.from rather than map: map skips holes, carrying an undefined element
+    // into the result instead of reporting it.
+    return Array.from(
+        requireArray(value, path),
+        (element, index) => requireStructure(element, `${path}[${index}]`),
+    );
 }
 
 function requireArray(value: unknown, path: string): unknown[] {
