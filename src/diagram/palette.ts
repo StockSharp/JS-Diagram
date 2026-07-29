@@ -22,7 +22,7 @@ export interface PaletteContextMenuPayload extends PaletteNodePayload {
     y: number;
 }
 
-export interface PaletteEvents extends Record<string, unknown> {
+export interface PaletteEvents {
     selectionChanged: PaletteSelectionChangedPayload;
     nodeActivated: PaletteNodePayload;
     contextMenuRequested: PaletteContextMenuPayload;

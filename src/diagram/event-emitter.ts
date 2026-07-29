@@ -1,6 +1,9 @@
 export type EventHandler<T> = (payload: T) => void;
 
-export class EventEmitter<TEvents extends Record<string, unknown>> {
+// TEvents is constrained to object rather than Record<string, unknown>: the
+// latter forces every event map to carry a string index signature, which
+// collapses keyof TEvents to string and lets any misspelled name compile.
+export class EventEmitter<TEvents extends object> {
     private readonly handlers = new Map<keyof TEvents, Set<EventHandler<unknown>>>();
 
     on<K extends keyof TEvents>(event: K, handler: EventHandler<TEvents[K]>): () => void {

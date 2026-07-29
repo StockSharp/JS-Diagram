@@ -806,7 +806,7 @@ export interface LinkValidatorArgs {
     toPort: Port;
 }
 export type LinkValidator = (args: LinkValidatorArgs) => boolean;
-export interface DiagramEvents extends Record<string, unknown> {
+export interface DiagramEvents {
     nodeAdded: NodeChangePayload;
     nodeRemoved: NodeChangePayload;
     linkAdded: LinkChangePayload;
@@ -851,7 +851,7 @@ export interface DiagramEvents extends Record<string, unknown> {
 // FILE: diagram/catalog.d.ts
 import { EventEmitter } from './event-emitter.js';
 import { Node, NodeInit, PortType, PortTypeInit } from './types.js';
-export interface CatalogEvents extends Record<string, unknown> {
+export interface CatalogEvents {
     portTypesChanged: PortType[];
     nodeTypesChanged: Node[];
 }
@@ -868,7 +868,7 @@ export declare class StockSharpCatalog extends EventEmitter<CatalogEvents> {
 
 // FILE: diagram/event-emitter.d.ts
 export type EventHandler<T> = (payload: T) => void;
-export declare class EventEmitter<TEvents extends Record<string, unknown>> {
+export declare class EventEmitter<TEvents extends object> {
     on<K extends keyof TEvents>(event: K, handler: EventHandler<TEvents[K]>): () => void;
     off<K extends keyof TEvents>(event: K, handler: EventHandler<TEvents[K]>): void;
     protected emit<K extends keyof TEvents>(event: K, payload: TEvents[K]): void;
@@ -895,7 +895,7 @@ export interface PaletteContextMenuPayload extends PaletteNodePayload {
     x: number;
     y: number;
 }
-export interface PaletteEvents extends Record<string, unknown> {
+export interface PaletteEvents {
     selectionChanged: PaletteSelectionChangedPayload;
     nodeActivated: PaletteNodePayload;
     contextMenuRequested: PaletteContextMenuPayload;

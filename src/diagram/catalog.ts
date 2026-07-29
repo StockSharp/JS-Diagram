@@ -1,7 +1,7 @@
 import { EventEmitter } from './event-emitter.js';
 import { Node, NodeInit, PortType, PortTypeInit } from './types.js';
 
-export interface CatalogEvents extends Record<string, unknown> {
+export interface CatalogEvents {
     portTypesChanged: PortType[];
     nodeTypesChanged: Node[];
 }

@@ -232,7 +232,7 @@ export interface LinkValidatorArgs {
 
 export type LinkValidator = (args: LinkValidatorArgs) => boolean;
 
-export interface DiagramEvents extends Record<string, unknown> {
+export interface DiagramEvents {
     nodeAdded: NodeChangePayload;
     nodeRemoved: NodeChangePayload;
     linkAdded: LinkChangePayload;
