@@ -1413,11 +1413,11 @@ test('high-level persistent edits use canvas history without capturing runtime e
 
     diagram.undo();
     assert.deepEqual(diagram.save().nodes[0].paramValues, {});
-    assert.equal(diagram.getRuntimeState().nodes.node.error?.message, 'Runtime failure');
+    assert.equal(diagram.getRuntimeState().nodes.node.errors.runtime?.message, 'Runtime failure');
 
     diagram.redo();
     assert.deepEqual(diagram.save().nodes[0].paramValues, { Period: '20' });
-    assert.equal(diagram.getRuntimeState().nodes.node.error?.message, 'Runtime failure');
+    assert.equal(diagram.getRuntimeState().nodes.node.errors.runtime?.message, 'Runtime failure');
 });
 
 test('high-level transaction groups property edits and rolls them back on failure', async () => {
@@ -1690,7 +1690,7 @@ test('high-level host can apply and clear runtime node errors', async () => {
     })], []);
 
     assert.equal(diagram.setNodeError('failed', 'Calculation failed.'), true);
-    assert.equal(diagram.getRuntimeState().nodes.failed.error?.message, 'Calculation failed.');
+    assert.equal(diagram.getRuntimeState().nodes.failed.errors.runtime?.message, 'Calculation failed.');
     let runtimeEvents = 0;
     diagram.on('runtimeStateChanged', () => { runtimeEvents += 1; });
     assert.equal(diagram.setActiveNode('failed'), true);
@@ -1702,7 +1702,7 @@ test('high-level host can apply and clear runtime node errors', async () => {
     assert.equal(diagram.getRuntimeState().globalError?.kind, 'locked');
     assert.ok(runtimeEvents >= 3);
     assert.equal(diagram.clearNodeError('failed'), true);
-    assert.equal(diagram.getRuntimeState().nodes.failed.error, null);
+    assert.deepEqual(diagram.getRuntimeState().nodes.failed.errors, {});
     diagram.clearRuntimeState();
     assert.deepEqual(diagram.getRuntimeState(), { activeNodeId: null, nodes: {}, globalError: null });
 });
@@ -1730,7 +1730,7 @@ test('high-level load errors remain transient', async () => {
     });
 
     assert.equal(
-        diagram.getRuntimeState().nodes.damaged.error?.message,
+        diagram.getRuntimeState().nodes.damaged.errors.load?.message,
         'Period could not be restored.',
     );
     assert.equal(diagram.save().nodes[0].message, '');
@@ -1813,4 +1813,37 @@ test('high-level load/save preserves the complete Designer node contract', async
         inNode: 'indicator-1',
         inPort: 'source',
     }));
+});
+
+test('a node keeps its load error when a runtime error is reported on top of it', () => {
+    const { diagram } = makeDiagram();
+    diagram.load([{ ...source, id: 'damaged', loadError: 'Saved scheme is damaged.' }], []);
+    const node = diagram.findNode('damaged')!;
+
+    assert.equal(diagram.setNodeError('damaged', 'Division by zero.'), true);
+    assert.equal(node.loadError, 'Saved scheme is damaged.');
+    assert.equal(node.runtimeError, 'Division by zero.');
+
+    // Both kinds have to survive in the serializable state, otherwise the very
+    // next state write projects the missing one away.
+    const state = diagram.getRuntimeState();
+    assert.equal(state.nodes.damaged.errors.load?.message, 'Saved scheme is damaged.');
+    assert.equal(state.nodes.damaged.errors.runtime?.message, 'Division by zero.');
+
+    // setActiveNode goes through getRuntimeState -> mutate -> setRuntimeState
+    // internally, so the round-trip is not something the host has to ask for.
+    assert.equal(diagram.setActiveNode('damaged'), true);
+    assert.equal(node.loadError, 'Saved scheme is damaged.');
+    assert.equal(node.runtimeError, 'Division by zero.');
+
+    diagram.setRuntimeState(diagram.getRuntimeState());
+    assert.equal(node.loadError, 'Saved scheme is damaged.');
+    assert.equal(node.runtimeError, 'Division by zero.');
+
+    // Clearing one kind leaves the other in place.
+    assert.equal(diagram.clearNodeError('damaged', 'runtime'), true);
+    assert.equal(node.runtimeError, '');
+    assert.equal(node.loadError, 'Saved scheme is damaged.');
+    assert.equal(diagram.getRuntimeState().nodes.damaged.errors.load?.message, 'Saved scheme is damaged.');
+    assert.equal(diagram.getRuntimeState().nodes.damaged.errors.runtime, undefined);
 });

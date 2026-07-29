@@ -12,6 +12,7 @@ import {
 import { DIAGRAM_DOCUMENT_VERSION, type JsonObject } from '../src/core/model';
 import { DiagramNode, Port } from '../src/diagram/types';
 import {
+    type DiagramRuntimeState,
     cloneDiagramRuntimeState,
     createDiagramNodeRuntimeState,
     createDiagramPortRuntimeState,
@@ -150,7 +151,7 @@ test('runtime, view and selection state have independent fresh defaults', () => 
 
     runtimeA.nodes.node = createDiagramNodeRuntimeState();
     runtimeA.nodes.node.active = true;
-    runtimeA.nodes.node.error = { kind: 'runtime', message: 'Failed', pulse: 1 };
+    runtimeA.nodes.node.errors.runtime = { kind: 'runtime', message: 'Failed', pulse: 1 };
     runtimeA.nodes.node.ports.out.value = createDiagramPortRuntimeState();
     selectionA.nodeIds.push('node');
 
@@ -283,4 +284,18 @@ test('an absent collection is absent whether it is undefined or null', () => {
         () => createDiagramDocument({ nodes: 'nope' } as unknown as DiagramDocumentInput),
         (error: unknown) => error instanceof DiagramDocumentError && error.path === '$.nodes',
     );
+});
+
+test('a node runtime state without the errors map is tolerated, not a crash', () => {
+    // Hosts persist runtime snapshots and build them by hand, and a snapshot
+    // written before errors existed has no such field. Reading one must not throw.
+    const legacy = {
+        activeNodeId: null,
+        globalError: null,
+        nodes: { n1: { active: true, ports: { in: {}, out: {} } } },
+    } as unknown as DiagramRuntimeState;
+
+    const cloned = cloneDiagramRuntimeState(legacy);
+    assert.deepEqual(cloned.nodes.n1.errors, {});
+    assert.equal(cloned.nodes.n1.active, true);
 });

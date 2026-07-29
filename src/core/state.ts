@@ -23,9 +23,18 @@ export interface DiagramNodePortRuntimeState {
     out: Record<string, DiagramPortRuntimeState>;
 }
 
+/**
+ * At most one error per kind. A node can carry a load error and a runtime error
+ * at the same time -- the tooltip shows both -- so a single slot could not hold
+ * what the editor already models, and every state write dropped one of them.
+ */
+export type DiagramNodeErrors = {
+    [TKind in DiagramNodeErrorKind]?: DiagramErrorState<TKind>;
+};
+
 export interface DiagramNodeRuntimeState {
     active: boolean;
-    error: DiagramErrorState<DiagramNodeErrorKind> | null;
+    errors: DiagramNodeErrors;
     ports: DiagramNodePortRuntimeState;
 }
 
@@ -77,7 +86,7 @@ export function cloneDiagramRuntimeState(state: DiagramRuntimeState): DiagramRun
         globalError: state.globalError === null ? null : { ...state.globalError },
         nodes: Object.fromEntries(Object.entries(state.nodes).map(([nodeId, node]) => [nodeId, {
             active: node.active,
-            error: node.error === null ? null : { ...node.error },
+            errors: cloneDiagramNodeErrors(node.errors),
             ports: {
                 in: Object.fromEntries(Object.entries(node.ports.in)
                     .map(([portId, port]) => [portId, { ...port }])),
@@ -142,7 +151,19 @@ export function createReadOnlyDiagramPermissions(): DiagramInteractionPermission
 export function createDiagramNodeRuntimeState(): DiagramNodeRuntimeState {
     return {
         active: false,
-        error: null,
+        errors: {},
         ports: { in: {}, out: {} },
     };
+}
+
+/**
+ * Tolerates a missing map: hosts persist runtime snapshots and build them by
+ * hand, so a state written before this field existed still has to be readable.
+ */
+export function cloneDiagramNodeErrors(errors: DiagramNodeErrors | undefined | null): DiagramNodeErrors {
+    const result: DiagramNodeErrors = {};
+    if (errors === undefined || errors === null) return result;
+    if (errors.runtime !== undefined) result.runtime = { ...errors.runtime };
+    if (errors.load !== undefined) result.load = { ...errors.load };
+    return result;
 }

@@ -562,9 +562,17 @@ export interface DiagramNodePortRuntimeState {
     in: Record<string, DiagramPortRuntimeState>;
     out: Record<string, DiagramPortRuntimeState>;
 }
+/**
+ * At most one error per kind. A node can carry a load error and a runtime error
+ * at the same time -- the tooltip shows both -- so a single slot could not hold
+ * what the editor already models, and every state write dropped one of them.
+ */
+export type DiagramNodeErrors = {
+    [TKind in DiagramNodeErrorKind]?: DiagramErrorState<TKind>;
+};
 export interface DiagramNodeRuntimeState {
     active: boolean;
-    error: DiagramErrorState<DiagramNodeErrorKind> | null;
+    errors: DiagramNodeErrors;
     ports: DiagramNodePortRuntimeState;
 }
 export interface DiagramRuntimeState {
@@ -608,6 +616,11 @@ export declare function createDiagramPortRuntimeState(): DiagramPortRuntimeState
 export declare function createEditableDiagramPermissions(): DiagramInteractionPermissions;
 export declare function createReadOnlyDiagramPermissions(): DiagramInteractionPermissions;
 export declare function createDiagramNodeRuntimeState(): DiagramNodeRuntimeState;
+/**
+ * Tolerates a missing map: hosts persist runtime snapshots and build them by
+ * hand, so a state written before this field existed still has to be readable.
+ */
+export declare function cloneDiagramNodeErrors(errors: DiagramNodeErrors | undefined | null): DiagramNodeErrors;
 
 // FILE: core/view-state.d.ts
 import { type DiagramViewState } from './state.js';
@@ -1431,10 +1444,10 @@ export { DiagramCommandHistory } from './core/history.js';
 export type { DiagramCommand, DiagramHistoryListener, DiagramHistoryState, } from './core/history.js';
 export { DIAGRAM_DOCUMENT_VERSION } from './core/model.js';
 export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentVersion, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, } from './core/model.js';
-export { createEditableDiagramPermissions, createDiagramNodeRuntimeState, createDiagramPortRuntimeState, createDiagramRuntimeState, cloneDiagramRuntimeState, createDiagramSelection, createDiagramViewState, createReadOnlyDiagramPermissions, } from './core/state.js';
+export { createEditableDiagramPermissions, createDiagramNodeRuntimeState, createDiagramPortRuntimeState, createDiagramRuntimeState, cloneDiagramNodeErrors, cloneDiagramRuntimeState, createDiagramSelection, createDiagramViewState, createReadOnlyDiagramPermissions, } from './core/state.js';
 export { DIAGRAM_VIEW_STATE_VERSION, DiagramViewStateError, createDiagramViewStateDocument, parseDiagramViewState, serializeDiagramViewState, } from './core/view-state.js';
 export type { DiagramViewStateDocument } from './core/view-state.js';
-export type { DiagramErrorState, DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramNodeErrorKind, DiagramNodePortRuntimeState, DiagramNodeRuntimeState, DiagramPortDirection, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelectedPort, DiagramSelection, DiagramViewState, } from './core/state.js';
+export type { DiagramErrorState, DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramNodeErrorKind, DiagramNodeErrors, DiagramNodePortRuntimeState, DiagramNodeRuntimeState, DiagramPortDirection, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelectedPort, DiagramSelection, DiagramViewState, } from './core/state.js';
 export { StockSharpDiagram, } from './diagram/stocksharp-diagram.js';
 export type { ContextCommand, ContextCommandPayload, ContextCommandState, ContextMenuRequestedPayload, DiagramEvents, DiagramClipboard, DiagramGridSettings, DiagramLoadOptions, DiagramNodeBounds, DiagramOptions, DiagramPoint, DiagramScreenshotOptions, DiagramScreenshotScope, DiagramThemeOptions, DocumentLoadFailedPayload, LinkChangePayload, LinkHoverPayload, LinkRelinkedPayload, LinkSelectedPayload, LinkValidationPayload, LinkValidationReason, LinkValidationResult, LinkValidator, LinkValidatorArgs, LoadFinishedPayload, NodeChangePayload, NodeErrorKind, NodeErrorOptions, NodeHoverPayload, NodeMovedPayload, NodeSelectedPayload, PortHoverPayload, PortClickAction, PortClickedPayload, PortSelectedPayload, } from './diagram/api.js';
 export { StockSharpCatalog } from './diagram/catalog.js';

@@ -1204,7 +1204,7 @@ export class Diagram {
         for (const node of this.nodes) {
             if (node.loadError.length === 0) continue;
             const state = createDiagramNodeRuntimeState();
-            state.error = { kind: 'load', message: node.loadError, pulse: ++this.runtimePulse };
+            state.errors.load = { kind: 'load', message: node.loadError, pulse: ++this.runtimePulse };
             this.runtimeState.nodes[node.id] = state;
         }
         if (Object.keys(this.runtimeState.nodes).length > 0) this.emitRuntimeStateChanged();
@@ -1415,15 +1415,17 @@ export class Diagram {
         this.runtimePulse = Math.max(
             this.runtimePulse,
             this.runtimeState.globalError?.pulse ?? 0,
-            ...Object.values(this.runtimeState.nodes).map((node) => node.error?.pulse ?? 0),
+            ...Object.values(this.runtimeState.nodes)
+                .flatMap((node) => [node.errors.runtime?.pulse ?? 0, node.errors.load?.pulse ?? 0]),
         );
         for (const node of this.nodes) {
-            const error = this.runtimeState.nodes[node.id]?.error ?? null;
-            const previousError = previous.nodes[node.id]?.error ?? null;
-            node.runtimeError = error?.kind === 'runtime' ? error.message : '';
-            node.loadError = error?.kind === 'load' ? error.message : '';
-            if (error?.kind === 'runtime') {
-                if (previousError?.kind !== 'runtime' || previousError.pulse !== error.pulse) {
+            const errors = this.runtimeState.nodes[node.id]?.errors;
+            const previousRuntime = previous.nodes[node.id]?.errors.runtime;
+            const runtimeError = errors?.runtime;
+            node.runtimeError = runtimeError?.message ?? '';
+            node.loadError = errors?.load?.message ?? '';
+            if (runtimeError !== undefined) {
+                if (previousRuntime === undefined || previousRuntime.pulse !== runtimeError.pulse) {
                     node.errorFlashStart = performance.now();
                 }
             } else {
@@ -1483,7 +1485,11 @@ export class Diagram {
         const state = this.getRuntimeState();
         const nodeState = state.nodes[id] ?? createDiagramNodeRuntimeState();
         state.nodes[id] = nodeState;
-        nodeState.error = message.length === 0 ? null : { kind, message, pulse: ++this.runtimePulse };
+        // Only this kind's slot is written, so an error of the other kind that is
+        // already on the node survives.
+        if (message.length === 0) delete nodeState.errors[kind];
+        else if (kind === 'load') nodeState.errors.load = { kind, message, pulse: ++this.runtimePulse };
+        else nodeState.errors.runtime = { kind, message, pulse: ++this.runtimePulse };
         this.runtimeState = state;
         this.emitRuntimeStateChanged();
         return true;
@@ -1498,12 +1504,9 @@ export class Diagram {
         if (kind === undefined || kind === 'load') node.loadError = '';
         const state = this.getRuntimeState();
         const nodeState = state.nodes[id];
-        if (nodeState !== undefined && (kind === undefined || nodeState.error?.kind === kind)) {
-            nodeState.error = node.runtimeError.length > 0
-                ? { kind: 'runtime', message: node.runtimeError, pulse: ++this.runtimePulse }
-                : node.loadError.length > 0
-                    ? { kind: 'load', message: node.loadError, pulse: ++this.runtimePulse }
-                    : null;
+        if (nodeState !== undefined) {
+            if (kind === undefined || kind === 'runtime') delete nodeState.errors.runtime;
+            if (kind === undefined || kind === 'load') delete nodeState.errors.load;
         }
         this.runtimeState = state;
         this.emitRuntimeStateChanged();

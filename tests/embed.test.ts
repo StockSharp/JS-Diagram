@@ -311,8 +311,8 @@ test('a stale source failure cannot replace a newer successful render with an er
     assert.equal(host.classList.contains('ss-diagram-error'), false);
     const missingNode = newer!.diagram.save().nodes[0];
     assert.equal(missingNode.isPlaceholder, true);
-    assert.equal(newer!.diagram.getRuntimeState().nodes.node.error?.kind, 'load');
-    assert.match(newer!.diagram.getRuntimeState().nodes.node.error?.message ?? '', /missing/i);
+    assert.equal(newer!.diagram.getRuntimeState().nodes.node.errors.load?.kind, 'load');
+    assert.match(newer!.diagram.getRuntimeState().nodes.node.errors.load?.message ?? '', /missing/i);
 
     newer!.destroy();
 });
