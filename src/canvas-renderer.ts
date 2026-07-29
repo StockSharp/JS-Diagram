@@ -439,10 +439,8 @@ export class LinkModel {
     }
 }
 
-const HEADER_H = 22;
 const PORT_R = 6;
 const PORT_ROW_H = 20;
-const NODE_PAD = 10;
 const RELINK_HANDLE_PX = 8;  // WPF relink adornment is an 8x8 diamond
 const RELINK_DRAG_THRESHOLD_PX = 4;
 const PORT_SQ = 9;           // socket square size — sits outside the node
@@ -530,8 +528,6 @@ export class Diagram {
     private dragNode: NodeModel | null = null;
     private dragStart: Array<{ n: NodeModel; x: number; y: number }> = [];   // group-drag origin
     private dragAnchor = { wx: 0, wy: 0 };
-    private dragDX = 0;
-    private dragDY = 0;
     private panning = false;
     private panX = 0;
     private panY = 0;

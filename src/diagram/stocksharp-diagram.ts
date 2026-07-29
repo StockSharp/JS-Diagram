@@ -77,7 +77,6 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private fullscreen = false;
     private fullscreenButtonVisible = true;
     private fullscreenLabels: DiagramFullscreenLabels = { enter: 'Enter fullscreen', exit: 'Exit fullscreen' };
-    private linkValidator: LinkValidator | null = null;
     private readonly contextActions = new DiagramActionRegistry<ContextCommand, ContextActionContext>();
 
     constructor(options: DiagramOptions) {
@@ -105,7 +104,6 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     }
 
     setLinkValidator(validator: LinkValidator | null): void {
-        this.linkValidator = validator;
         this.canvas.setLinkValidator(validator === null ? null : ({ fromNode, fromPort, toNode, toPort }) => validator({
             fromNode: this.fromCanvasNode(fromNode),
             fromPort: this.fromCanvasPort(fromPort),
