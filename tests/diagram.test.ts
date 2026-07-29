@@ -1847,3 +1847,40 @@ test('a node keeps its load error when a runtime error is reported on top of it'
     assert.equal(diagram.getRuntimeState().nodes.damaged.errors.load?.message, 'Saved scheme is damaged.');
     assert.equal(diagram.getRuntimeState().nodes.damaged.errors.runtime, undefined);
 });
+
+test('every context command in the public union is actually registered', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const diagram = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    // The menu is built from the registry, so a command that the union declares
+    // but nobody registered would simply be absent here -- and executing it would
+    // be a silent no-op rather than an error.
+    const commands = diagram.getContextCommands().map(({ command }) => command);
+    assert.deepEqual(commands.slice().sort(), [
+        'copy', 'cut', 'delete', 'help', 'open', 'paste', 'properties', 'redo', 'undo',
+    ]);
+});
+
+test('registerAll keeps class-based actions working', async () => {
+    const { DiagramActionRegistry } = await import('../src/index');
+    class Undo {
+        calls = 0;
+        canExecute(): boolean { return true; }
+        execute(): void { this.calls += 1; }
+    }
+    const undo = new Undo();
+    const registry = new DiagramActionRegistry<'undo', void>();
+
+    // A spread would copy the own fields and drop the prototype methods, so the
+    // registration would type-check and then throw on the first use.
+    registry.registerAll({ undo });
+
+    assert.equal(registry.canExecute('undo', undefined), true);
+    assert.equal(registry.execute('undo', undefined), true);
+    assert.equal(undo.calls, 1);
+    assert.deepEqual(registry.states(undefined), [{ id: 'undo', enabled: true }]);
+});

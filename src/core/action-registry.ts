@@ -22,6 +22,31 @@ export class DiagramActionRegistry<TId extends string, TContext> {
         };
     }
 
+    /**
+     * Registers one action per id from a table keyed by TId, in key order.
+     * Because the table is a total Record, adding a member to TId without adding
+     * its action stops compiling instead of producing a command that silently
+     * does nothing.
+     */
+    registerAll(actions: Record<TId, Omit<DiagramAction<TId, TContext>, 'id'>>): () => void {
+        // Object.keys is typed string[] because a value can carry keys beyond the
+        // ones its type names. This parameter is a total Record over TId, so its
+        // keys are exactly TId.
+        const ids = Object.keys(actions) as TId[];
+        // Delegating rather than spreading: a spread would copy own fields and
+        // drop the prototype, so a class-based action would register cleanly and
+        // then throw on its first call.
+        const disposers = ids.map((id) => {
+            const action = actions[id];
+            return this.register({
+                id,
+                canExecute: (context) => action.canExecute(context),
+                execute: (context) => action.execute(context),
+            });
+        });
+        return () => disposers.forEach((dispose) => dispose());
+    }
+
     get(id: TId): DiagramAction<TId, TContext> | null {
         return this.actions.get(id) ?? null;
     }

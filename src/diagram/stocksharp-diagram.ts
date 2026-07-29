@@ -758,51 +758,47 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 
     private registerContextActions(): void {
         const permissions = () => this.canvas.getInteractionPermissions();
-        this.contextActions.register({
-            id: 'undo',
-            canExecute: () => this.canUndo(),
-            execute: () => this.undo(),
-        });
-        this.contextActions.register({
-            id: 'redo',
-            canExecute: () => this.canRedo(),
-            execute: () => this.redo(),
-        });
-        this.contextActions.register({
-            id: 'cut',
-            canExecute: ({ nodes }) => nodes.length > 0 && permissions().copy && permissions().deleteSelection,
-            execute: () => this.cutSelection(),
-        });
-        this.contextActions.register({
-            id: 'copy',
-            canExecute: ({ nodes }) => nodes.length > 0 && permissions().copy,
-            execute: () => this.copySelection(),
-        });
-        this.contextActions.register({
-            id: 'paste',
-            canExecute: () => this.canvas.hasClipboard() && permissions().paste,
-            execute: () => this.pasteSelection(),
-        });
-        this.contextActions.register({
-            id: 'open',
-            canExecute: ({ nodes }) => nodes.length === 1 && nodes[0].openAction.length > 0,
-            execute: ({ nodes }) => this.emit('nodeOpen', { nodes }),
-        });
-        this.contextActions.register({
-            id: 'delete',
-            canExecute: ({ selection }) => permissions().deleteSelection
-                && (selection.nodeIds.length > 0 || selection.linkIds.length > 0),
-            execute: () => this.canvas.deleteSelection(),
-        });
-        this.contextActions.register({
-            id: 'properties',
-            canExecute: ({ nodes }) => nodes.length > 0,
-            execute: ({ nodes }) => this.emit('nodeProperties', { nodes }),
-        });
-        this.contextActions.register({
-            id: 'help',
-            canExecute: ({ nodes }) => this.helpEnabled && nodes.length > 0,
-            execute: ({ nodes }) => this.emit('nodeHelp', { nodes }),
+        // Keyed by ContextCommand, so a command added to the union without an
+        // entry here fails to compile rather than quietly missing from the menu.
+        // Key order is menu order.
+        this.contextActions.registerAll({
+            undo: {
+                canExecute: () => this.canUndo(),
+                execute: () => this.undo(),
+            },
+            redo: {
+                canExecute: () => this.canRedo(),
+                execute: () => this.redo(),
+            },
+            cut: {
+                canExecute: ({ nodes }) => nodes.length > 0 && permissions().copy && permissions().deleteSelection,
+                execute: () => this.cutSelection(),
+            },
+            copy: {
+                canExecute: ({ nodes }) => nodes.length > 0 && permissions().copy,
+                execute: () => this.copySelection(),
+            },
+            paste: {
+                canExecute: () => this.canvas.hasClipboard() && permissions().paste,
+                execute: () => this.pasteSelection(),
+            },
+            open: {
+                canExecute: ({ nodes }) => nodes.length === 1 && nodes[0].openAction.length > 0,
+                execute: ({ nodes }) => this.emit('nodeOpen', { nodes }),
+            },
+            delete: {
+                canExecute: ({ selection }) => permissions().deleteSelection
+                    && (selection.nodeIds.length > 0 || selection.linkIds.length > 0),
+                execute: () => this.canvas.deleteSelection(),
+            },
+            properties: {
+                canExecute: ({ nodes }) => nodes.length > 0,
+                execute: ({ nodes }) => this.emit('nodeProperties', { nodes }),
+            },
+            help: {
+                canExecute: ({ nodes }) => this.helpEnabled && nodes.length > 0,
+                execute: ({ nodes }) => this.emit('nodeHelp', { nodes }),
+            },
         });
     }
 

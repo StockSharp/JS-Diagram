@@ -396,6 +396,13 @@ export interface DiagramActionState<TId extends string> {
 }
 export declare class DiagramActionRegistry<TId extends string, TContext> {
     register(action: DiagramAction<TId, TContext>): () => void;
+    /**
+     * Registers one action per id from a table keyed by TId, in key order.
+     * Because the table is a total Record, adding a member to TId without adding
+     * its action stops compiling instead of producing a command that silently
+     * does nothing.
+     */
+    registerAll(actions: Record<TId, Omit<DiagramAction<TId, TContext>, 'id'>>): () => void;
     get(id: TId): DiagramAction<TId, TContext> | null;
     states(context: TContext): DiagramActionState<TId>[];
     canExecute(id: TId, context: TContext): boolean;
