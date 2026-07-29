@@ -1916,3 +1916,54 @@ test('mutators report whether they found their target instead of returning void'
     assert.equal(diagram.setNodeName('node', 'Renamed again'), true);
     assert.equal(diagram.setNodeName('missing', 'Renamed again'), false);
 });
+
+test('the catalog hands out copies of its node types, never the stored ones', async () => {
+    const { Node, StockSharpCatalog } = await import('../src/index');
+    const catalog = new StockSharpCatalog();
+    catalog.addNodeType(new Node({
+        id: 'indicator',
+        name: 'Indicator',
+        inPorts: [{ id: 'source', name: 'Source', type: 'Candle' }],
+    }));
+
+    const first = catalog.getNodeType('indicator')!;
+    first.name = 'HIJACKED';
+    first.inPorts.length = 0;
+
+    const second = catalog.getNodeType('indicator')!;
+    assert.equal(second.name, 'Indicator');
+    assert.equal(second.inPorts.length, 1);
+    assert.notEqual(second, first);
+
+    const listed = catalog.getNodeTypes()[0];
+    listed.name = 'ALSO HIJACKED';
+    assert.equal(catalog.getNodeTypes()[0].name, 'Indicator');
+
+    // The instance handed to addNodeType is copied too, so a caller that keeps
+    // editing its own object cannot reach into the catalog.
+    const source = new Node({ id: 'later', name: 'Later' });
+    catalog.addNodeType(source);
+    source.name = 'MUTATED AFTER ADD';
+    assert.equal(catalog.getNodeType('later')!.name, 'Later');
+});
+
+test('the catalog copies a plain node definition too, not just a Node instance', async () => {
+    const { Port, StockSharpCatalog } = await import('../src/index');
+    const catalog = new StockSharpCatalog();
+    const port = new Port({ id: 'in', name: 'In', type: 'Candle' });
+    const parameters = [{
+        name: 'Period', displayName: 'Period', description: '', type: 'number',
+        defaultValue: '20', options: [], min: null, max: null,
+        displayOrder: 0, category: '', isBasic: true, editorType: '',
+    }];
+
+    catalog.addNodeType({ id: 'indicator', name: 'Indicator', inPorts: [port], parameters });
+    port.name = 'MUTATED';
+    parameters[0].defaultValue = 'MUTATED';
+    parameters.push({ ...parameters[0], name: 'Extra' });
+
+    const stored = catalog.getNodeType('indicator')!;
+    assert.equal(stored.inPorts[0].name, 'In');
+    assert.equal(stored.parameters.length, 1);
+    assert.equal(stored.parameters[0].defaultValue, '20');
+});

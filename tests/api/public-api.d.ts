@@ -901,6 +901,11 @@ export declare class EventEmitter<TEvents extends object> {
     on<K extends keyof TEvents>(event: K, handler: EventHandler<TEvents[K]>): () => void;
     off<K extends keyof TEvents>(event: K, handler: EventHandler<TEvents[K]>): void;
     protected emit<K extends keyof TEvents>(event: K, payload: TEvents[K]): void;
+    /**
+     * Whether anyone is listening. Lets a subject skip building a payload that
+     * is expensive to produce and that nothing would read.
+     */
+    protected hasHandlers<K extends keyof TEvents>(event: K): boolean;
     protected clearEventHandlers(): void;
 }
 

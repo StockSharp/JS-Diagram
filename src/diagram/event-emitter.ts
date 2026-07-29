@@ -41,6 +41,14 @@ export class EventEmitter<TEvents extends object> {
         }
     }
 
+    /**
+     * Whether anyone is listening. Lets a subject skip building a payload that
+     * is expensive to produce and that nothing would read.
+     */
+    protected hasHandlers<K extends keyof TEvents>(event: K): boolean {
+        return (this.handlers.get(event)?.size ?? 0) > 0;
+    }
+
     protected clearEventHandlers(): void {
         this.handlers.clear();
     }
