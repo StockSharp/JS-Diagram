@@ -1,0 +1,11 @@
+{
+  // Tests and the Playwright config run on Node, not in the browser, so they get
+  // Node's globals and a newer lib than the shipped library targets.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"]
+  },
+  "include": ["tests/**/*.ts", "playwright.config.ts"],
+  "exclude": ["tests/_dist", "tests/api"]
+}

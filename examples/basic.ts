@@ -9,28 +9,30 @@ import {
     StockSharpPalette,
 } from '../src/index';
 
-const root = document.documentElement;
-const diagramHost = document.querySelector<HTMLElement>('#diagram');
-const canvasPanel = document.querySelector<HTMLElement>('.canvas-panel');
-const paletteHost = document.querySelector<HTMLElement>('#palette');
-const search = document.querySelector<HTMLInputElement>('#paletteSearch');
-const status = document.querySelector<HTMLElement>('#status');
-const modelStats = document.querySelector<HTMLElement>('#modelStats');
-const indicatorDialog = document.querySelector<HTMLDialogElement>('#indicatorDialog');
-const indicatorForm = document.querySelector<HTMLFormElement>('#indicatorForm');
-const indicatorTitle = document.querySelector<HTMLElement>('#indicatorTitle');
-const indicatorPeriod = document.querySelector<HTMLInputElement>('#indicatorPeriod');
-const indicatorInputType = document.querySelector<HTMLSelectElement>('#indicatorInputType');
-const indicatorInputMulti = document.querySelector<HTMLInputElement>('#indicatorInputMulti');
-const indicatorOutputMulti = document.querySelector<HTMLInputElement>('#indicatorOutputMulti');
-const themeButton = document.querySelector<HTMLButtonElement>('#themeBtn');
-const fullscreenButton = document.querySelector<HTMLButtonElement>('#fullscreenBtn');
+// Fails loudly on missing markup and hands back a non-nullable element, so the
+// demo never needs a `!` and the null check cannot drift out of sync with use.
+function requireElement<T extends Element>(selector: string): T {
+    const element = document.querySelector<T>(selector);
+    if (element === null) throw new Error(`Diagram demo markup is incomplete: ${selector} is missing.`);
+    return element;
+}
 
-if (diagramHost === null || canvasPanel === null || paletteHost === null || search === null
-    || status === null || modelStats === null || themeButton === null || fullscreenButton === null
-    || indicatorDialog === null || indicatorForm === null || indicatorTitle === null || indicatorPeriod === null
-    || indicatorInputType === null || indicatorInputMulti === null || indicatorOutputMulti === null)
-    throw new Error('Diagram demo markup is incomplete.');
+const root = document.documentElement;
+const diagramHost = requireElement<HTMLElement>('#diagram');
+const canvasPanel = requireElement<HTMLElement>('.canvas-panel');
+const paletteHost = requireElement<HTMLElement>('#palette');
+const search = requireElement<HTMLInputElement>('#paletteSearch');
+const status = requireElement<HTMLElement>('#status');
+const modelStats = requireElement<HTMLElement>('#modelStats');
+const indicatorDialog = requireElement<HTMLDialogElement>('#indicatorDialog');
+const indicatorForm = requireElement<HTMLFormElement>('#indicatorForm');
+const indicatorTitle = requireElement<HTMLElement>('#indicatorTitle');
+const indicatorPeriod = requireElement<HTMLInputElement>('#indicatorPeriod');
+const indicatorInputType = requireElement<HTMLSelectElement>('#indicatorInputType');
+const indicatorInputMulti = requireElement<HTMLInputElement>('#indicatorInputMulti');
+const indicatorOutputMulti = requireElement<HTMLInputElement>('#indicatorOutputMulti');
+const themeButton = requireElement<HTMLButtonElement>('#themeBtn');
+const fullscreenButton = requireElement<HTMLButtonElement>('#fullscreenBtn');
 
 const svgIcon = (label: string, color: string): string => {
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect x="1" y="1" width="22" height="22" rx="5" fill="${color}"/><text x="12" y="16" text-anchor="middle" font-family="Segoe UI,sans-serif" font-size="11" font-weight="700" fill="#0b0e11">${label}</text></svg>`;
@@ -187,8 +189,8 @@ function setStatus(message: string): void {
 function updateState(): void {
     const model = diagram.save();
     modelStats.textContent = `${model.nodes.length} nodes · ${model.links.length} links`;
-    document.querySelector<HTMLButtonElement>('#undoBtn')!.disabled = !diagram.canUndo();
-    document.querySelector<HTMLButtonElement>('#redoBtn')!.disabled = !diagram.canRedo();
+    requireElement<HTMLButtonElement>('#undoBtn').disabled = !diagram.canUndo();
+    requireElement<HTMLButtonElement>('#redoBtn').disabled = !diagram.canRedo();
 }
 
 function applyTheme(): void {
@@ -320,7 +322,7 @@ indicatorForm.addEventListener('submit', (event) => {
     indicatorDialog.close();
     activeIndicator = null;
 });
-document.querySelector<HTMLButtonElement>('#indicatorCancelBtn')!.addEventListener('click', () => {
+requireElement<HTMLButtonElement>('#indicatorCancelBtn').addEventListener('click', () => {
     activeIndicator = null;
     indicatorDialog.close();
 });
@@ -344,14 +346,16 @@ diagramHost.addEventListener('drop', (event) => {
     }
 });
 
-document.querySelector<HTMLButtonElement>('#resetBtn')!.addEventListener('click', reset);
-document.querySelector<HTMLButtonElement>('#undoBtn')!.addEventListener('click', () => {
+// Wrapped, not passed directly: reset() takes node errors, and handing it to
+// addEventListener would feed it the click event as that argument.
+requireElement<HTMLButtonElement>('#resetBtn').addEventListener('click', () => reset());
+requireElement<HTMLButtonElement>('#undoBtn').addEventListener('click', () => {
     diagram.undo(); updateState();
 });
-document.querySelector<HTMLButtonElement>('#redoBtn')!.addEventListener('click', () => {
+requireElement<HTMLButtonElement>('#redoBtn').addEventListener('click', () => {
     diagram.redo(); updateState();
 });
-document.querySelector<HTMLButtonElement>('#exportBtn')!.addEventListener('click', () => {
+requireElement<HTMLButtonElement>('#exportBtn').addEventListener('click', () => {
     const image = diagram.takeScreenshot({
         scope: 'content',
         pixelRatio: 2,
@@ -376,11 +380,11 @@ document.querySelector<HTMLButtonElement>('#exportBtn')!.addEventListener('click
         setStatus('Full strategy image exported.');
     }, 'image/png');
 });
-document.querySelector<HTMLButtonElement>('#runtimeErrorBtn')!.addEventListener('click', () => {
+requireElement<HTMLButtonElement>('#runtimeErrorBtn').addEventListener('click', () => {
     diagram.setNodeError('orders', 'Order Builder failed: order volume is not configured.');
     setStatus('Runtime error highlighted on Buy on cross. Hover the node for details.');
 });
-document.querySelector<HTMLButtonElement>('#loadErrorBtn')!.addEventListener('click', () => {
+requireElement<HTMLButtonElement>('#loadErrorBtn').addEventListener('click', () => {
     reset({
         slow: 'Scheme load failed for Slow SMA: the saved Period value is invalid.',
     });
@@ -389,7 +393,7 @@ document.querySelector<HTMLButtonElement>('#loadErrorBtn')!.addEventListener('cl
 themeButton.addEventListener('click', () => {
     light = !light; applyTheme();
 });
-document.querySelector<HTMLButtonElement>('#readonlyBtn')!.addEventListener('click', (event) => {
+requireElement<HTMLButtonElement>('#readonlyBtn').addEventListener('click', (event) => {
     readOnly = !readOnly;
     diagram.setReadOnly(readOnly);
     const button = event.currentTarget as HTMLButtonElement;
@@ -397,7 +401,7 @@ document.querySelector<HTMLButtonElement>('#readonlyBtn')!.addEventListener('cli
     button.textContent = readOnly ? '● Locked' : 'Read-only';
     setStatus(readOnly ? 'Read-only preview mode.' : 'Editing enabled.');
 });
-document.querySelector<HTMLButtonElement>('#addBtn')!.addEventListener('click', () => {
+requireElement<HTMLButtonElement>('#addBtn').addEventListener('click', () => {
     const id = `indicator-${customSequence++}`;
     const created = node('sma', id, `SMA (${10 + customSequence * 3})`, 470, 400);
     diagram.addDiagramNode(created);

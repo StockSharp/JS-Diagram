@@ -1,0 +1,6 @@
+{
+  // The demo is browser code bundled by esbuild exactly like the library, so it
+  // is checked under the same options as src -- including "types": [].
+  "extends": "./tsconfig.json",
+  "include": ["examples"]
+}
