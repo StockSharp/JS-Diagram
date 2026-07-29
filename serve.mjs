@@ -18,8 +18,10 @@ const mime = {
 createServer(async (request, response) => {
     try {
         const url = decodeURIComponent((request.url || '/').split('?')[0]);
-        const relative = normalize(url).replace(/^([.][.][/\\])+/, '');
-        const file = join(root, relative === '/' ? 'demo/index.html' : relative);
+        // Tested before normalize: on Windows it rewrites "/" to "\", so a check
+        // on the normalized value never matched and the root answered 404.
+        const relative = url === '/' ? 'demo/index.html' : normalize(url).replace(/^([.][.][/\\])+/, '');
+        const file = join(root, relative);
         const body = await readFile(file);
         response.writeHead(200, {
             'content-type': mime[extname(file)] ?? 'application/octet-stream',
