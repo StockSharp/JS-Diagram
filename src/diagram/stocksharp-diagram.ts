@@ -200,29 +200,33 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.canvas.removeLink(this.toCanvasLink(link));
     }
 
-    addPort(nodeId: string, direction: PortDirection, port: Port): void {
-        this.canvas.addPort(nodeId, direction, this.toCanvasPort(port));
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    addPort(nodeId: string, direction: PortDirection, port: Port): boolean {
+        return this.canvas.addPort(nodeId, direction, this.toCanvasPort(port));
     }
 
-    removePort(nodeId: string, direction: PortDirection, portId: string): void {
-        this.canvas.removePort(nodeId, direction, portId);
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    removePort(nodeId: string, direction: PortDirection, portId: string): boolean {
+        return this.canvas.removePort(nodeId, direction, portId);
     }
 
-    updatePortType(nodeId: string, direction: PortDirection, portId: string, type: string): void {
-        this.canvas.updatePortType(nodeId, direction, portId, type);
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    updatePortType(nodeId: string, direction: PortDirection, portId: string, type: string): boolean {
+        return this.canvas.updatePortType(nodeId, direction, portId, type);
     }
 
     updatePort(nodeId: string, direction: PortDirection, portId: string, patch: PortUpdate): boolean {
         return this.canvas.updatePort(nodeId, direction, portId, patch);
     }
 
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
     setNodePorts(
         nodeId: string,
         inPorts: ReadonlyArray<{ key: string; name: string; description: string; type: string; maxLinks: number; availableTypes?: string[]; isDynamic?: boolean; dynamicMode?: string }>,
         outPorts: ReadonlyArray<{ key: string; name: string; description: string; type: string; maxLinks: number; availableTypes?: string[]; isDynamic?: boolean; dynamicMode?: string }>,
-    ): void {
+    ): boolean {
         const current = this.canvas.findNode(nodeId);
-        if (current === undefined) return;
+        if (current === undefined) return false;
         const convert = (port: typeof inPorts[number]): CanvasPortInit => ({
             id: port.key,
             name: port.name,
@@ -241,15 +245,17 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         for (const sibling of current.outPorts.filter((port) => port.isSibling)) {
             if (!nextOut.some((port) => port.id === sibling.id)) nextOut.push(sibling.toInit());
         }
-        this.canvas.setNodePorts(nodeId, nextIn, nextOut);
+        return this.canvas.setNodePorts(nodeId, nextIn, nextOut);
     }
 
-    updateNode(nodeId: string, patch: { name?: string; description?: string; color?: string; border?: string }): void {
-        this.canvas.updateNode(nodeId, patch);
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    updateNode(nodeId: string, patch: { name?: string; description?: string; color?: string; border?: string }): boolean {
+        return this.canvas.updateNode(nodeId, patch);
     }
 
-    setNodeMessage(nodeId: string, message: string): void {
-        this.canvas.updateNode(nodeId, { message });
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    setNodeMessage(nodeId: string, message: string): boolean {
+        return this.canvas.updateNode(nodeId, { message });
     }
 
     setNodeError(nodeId: string, message: string, options: NodeErrorOptions = {}): boolean {
@@ -289,12 +295,14 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.canvas.setGlobalError(message, kind);
     }
 
-    setNodeParamValue(nodeId: string, paramName: string, value: string | undefined): void {
-        this.canvas.setNodeParamValue(nodeId, paramName, value);
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    setNodeParamValue(nodeId: string, paramName: string, value: string | undefined): boolean {
+        return this.canvas.setNodeParamValue(nodeId, paramName, value);
     }
 
-    setNodeName(nodeId: string, value: string): void {
-        this.canvas.updateNode(nodeId, { name: value });
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    setNodeName(nodeId: string, value: string): boolean {
+        return this.canvas.updateNode(nodeId, { name: value });
     }
 
     /** Groups host-driven document edits into one undo/redo operation. */

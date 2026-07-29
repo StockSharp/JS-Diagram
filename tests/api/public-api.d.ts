@@ -965,10 +965,14 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     validateLink(link: Link, excludeLinkId?: string): LinkValidationResult;
     relink(linkId: string, link: Link): LinkValidationResult;
     removeLink(link: Link): void;
-    addPort(nodeId: string, direction: PortDirection, port: Port): void;
-    removePort(nodeId: string, direction: PortDirection, portId: string): void;
-    updatePortType(nodeId: string, direction: PortDirection, portId: string, type: string): void;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    addPort(nodeId: string, direction: PortDirection, port: Port): boolean;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    removePort(nodeId: string, direction: PortDirection, portId: string): boolean;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    updatePortType(nodeId: string, direction: PortDirection, portId: string, type: string): boolean;
     updatePort(nodeId: string, direction: PortDirection, portId: string, patch: PortUpdate): boolean;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
     setNodePorts(nodeId: string, inPorts: ReadonlyArray<{
         key: string;
         name: string;
@@ -987,14 +991,16 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         availableTypes?: string[];
         isDynamic?: boolean;
         dynamicMode?: string;
-    }>): void;
+    }>): boolean;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
     updateNode(nodeId: string, patch: {
         name?: string;
         description?: string;
         color?: string;
         border?: string;
-    }): void;
-    setNodeMessage(nodeId: string, message: string): void;
+    }): boolean;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    setNodeMessage(nodeId: string, message: string): boolean;
     setNodeError(nodeId: string, message: string, options?: NodeErrorOptions): boolean;
     clearNodeError(nodeId: string, kind?: NodeErrorKind): boolean;
     getRuntimeState(): DiagramRuntimeState;
@@ -1003,8 +1009,10 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     setActiveNode(nodeId: string | null): boolean;
     setPortRuntimeState(nodeId: string, direction: PortDirection, portId: string, patch: Partial<DiagramPortRuntimeState>): boolean;
     setGlobalError(message: string | null, kind?: DiagramGlobalErrorKind): void;
-    setNodeParamValue(nodeId: string, paramName: string, value: string | undefined): void;
-    setNodeName(nodeId: string, value: string): void;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    setNodeParamValue(nodeId: string, paramName: string, value: string | undefined): boolean;
+    /** False when nothing changed: no such node or port, or the edit was a no-op. */
+    setNodeName(nodeId: string, value: string): boolean;
     /** Groups host-driven document edits into one undo/redo operation. */
     transaction<T>(label: string, action: () => T): T;
     setShowNodeMessages(show: boolean): void;

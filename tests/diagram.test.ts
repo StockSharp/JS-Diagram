@@ -1884,3 +1884,35 @@ test('registerAll keeps class-based actions working', async () => {
     assert.equal(undo.calls, 1);
     assert.deepEqual(registry.states(undefined), [{ id: 'undo', enabled: true }]);
 });
+
+test('mutators report whether they found their target instead of returning void', async () => {
+    installDom();
+    const { DiagramNode, Port, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const diagram = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({
+        id: 'node',
+        name: 'Node',
+        inPorts: [{ id: 'in', name: 'In', type: 'Candle' }],
+    })], []);
+
+    const port = new Port({ id: 'extra', name: 'Extra', type: 'Candle' });
+    assert.equal(diagram.addPort('node', 'in', port), true);
+    assert.equal(diagram.addPort('missing', 'in', port), false);
+    assert.equal(diagram.removePort('node', 'in', 'extra'), true);
+    assert.equal(diagram.removePort('missing', 'in', 'extra'), false);
+    assert.equal(diagram.updatePortType('node', 'in', 'in', 'Decimal'), true);
+    assert.equal(diagram.updatePortType('missing', 'in', 'in', 'Decimal'), false);
+    assert.equal(diagram.setNodePorts('node', [], []), true);
+    assert.equal(diagram.setNodePorts('missing', [], []), false);
+    assert.equal(diagram.updateNode('node', { name: 'Renamed' }), true);
+    assert.equal(diagram.updateNode('missing', { name: 'Renamed' }), false);
+    assert.equal(diagram.setNodeMessage('node', 'Note'), true);
+    assert.equal(diagram.setNodeMessage('missing', 'Note'), false);
+    assert.equal(diagram.setNodeParamValue('node', 'Period', '20'), true);
+    assert.equal(diagram.setNodeParamValue('missing', 'Period', '20'), false);
+    assert.equal(diagram.setNodeName('node', 'Renamed again'), true);
+    assert.equal(diagram.setNodeName('missing', 'Renamed again'), false);
+});
