@@ -1,4 +1,5 @@
-import type { JsonObject } from '../core/model.js';
+import { toPortDynamicMode } from '../core/model.js';
+import type { JsonObject, PortDynamicMode } from '../core/model.js';
 
 // Core data model — node/port catalog (palette) and the live diagram (DiagramNode + Link).
 
@@ -29,7 +30,7 @@ export interface PortInit {
     /// True when this port can be added/removed at runtime on a node.
     isDynamic?: boolean;
     /// "" / "manual" / "onConnect" — see PalettePortDto.dynamicMode docs.
-    dynamicMode?: string;
+    dynamicMode?: PortDynamicMode;
     /// True when this port was spawned by the grow-on-connect pipeline.
     /// Distinguishes anchor + runtime siblings on save (only siblings are
     /// persisted in the diagram blob; anchors come from the palette schema).
@@ -47,7 +48,7 @@ export class Port {
     maxLinks: number;
     availableTypes: string[];
     isDynamic: boolean;
-    dynamicMode: string;
+    dynamicMode: PortDynamicMode;
     isSibling: boolean;
 
     constructor(init: PortInit) {
@@ -58,7 +59,7 @@ export class Port {
         this.maxLinks = typeof init.maxLinks === 'number' ? init.maxLinks : 0;
         this.availableTypes = init.availableTypes ?? [];
         this.isDynamic = init.isDynamic ?? false;
-        this.dynamicMode = init.dynamicMode ?? '';
+        this.dynamicMode = toPortDynamicMode(init.dynamicMode);
         this.isSibling = init.isSibling ?? false;
     }
 
@@ -268,7 +269,7 @@ export interface PortData {
     /// the anchor port spawns a sibling
     /// on each link drop and the link is rerouted to the sibling.
     isDynamic?: boolean;
-    dynamicMode?: string;
+    dynamicMode?: PortDynamicMode;
     /// True when this port was spawned by the dynamic-growth pipeline rather
     /// than declared on the palette element. Persists in the diagram blob so
     /// reload restores the same set of sibling sockets.

@@ -1,5 +1,5 @@
 // FILE: canvas-renderer.d.ts
-import type { DiagramDocument, DiagramParameterSchema, JsonObject } from './core/model.js';
+import type { DiagramDocument, DiagramParameterSchema, JsonObject, PortDynamicMode } from './core/model.js';
 import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramViewState } from './core/state.js';
 export type PortDirection = 'in' | 'out';
 export type PortClickAction = 'leftClick' | 'rightClick';
@@ -11,7 +11,7 @@ export interface PortInit {
     maxLinks?: number;
     availableTypes?: string[];
     isDynamic?: boolean;
-    dynamicMode?: string;
+    dynamicMode?: PortDynamicMode;
     isSibling?: boolean;
     metadata?: JsonObject;
 }
@@ -229,7 +229,7 @@ export declare class PortModel {
     maxLinks: number;
     availableTypes: string[];
     isDynamic: boolean;
-    dynamicMode: string;
+    dynamicMode: PortDynamicMode;
     isSibling: boolean;
     metadata: JsonObject;
     cx: number;
@@ -481,6 +481,15 @@ export interface DiagramParameterSchema {
     isBasic: boolean;
     editorType: string;
 }
+/**
+ * How a dynamic port grows. Only 'onConnect' makes the editor add a typed
+ * sibling when a link lands on the port; '' and 'manual' leave it to the host.
+ * The renderer compares this with ===, so a value outside the set silently
+ * selects the do-nothing branch -- hence a union rather than a string.
+ */
+export type PortDynamicMode = '' | 'manual' | 'onConnect';
+/** Narrows an untyped value to the closed set, defaulting to the inert mode. */
+export declare function toPortDynamicMode(value: unknown): PortDynamicMode;
 export interface DiagramDocumentPort {
     id: string;
     name: string;
@@ -489,7 +498,7 @@ export interface DiagramDocumentPort {
     maxLinks: number;
     availableTypes: string[];
     isDynamic: boolean;
-    dynamicMode: string;
+    dynamicMode: PortDynamicMode;
     isSibling: boolean;
     metadata: JsonObject;
 }
@@ -943,7 +952,7 @@ export declare class StockSharpPalette extends EventEmitter<PaletteEvents> {
 }
 
 // FILE: diagram/stocksharp-diagram.d.ts
-import type { DiagramDocument } from '../core/model.js';
+import type { DiagramDocument, PortDynamicMode } from '../core/model.js';
 import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramViewState } from '../core/state.js';
 import { EventEmitter } from './event-emitter.js';
 import type { DiagramEvents, ContextCommand, DiagramLoadOptions, DiagramFullscreenLabels, DiagramGridSettings, DiagramNodeBounds, DiagramPoint, DiagramOptions, DiagramScreenshotOptions, DiagramThemeOptions, LinkValidationResult, LinkValidator, NodeErrorKind, NodeErrorOptions } from './api.js';
@@ -981,7 +990,7 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         maxLinks: number;
         availableTypes?: string[];
         isDynamic?: boolean;
-        dynamicMode?: string;
+        dynamicMode?: PortDynamicMode;
     }>, outPorts: ReadonlyArray<{
         key: string;
         name: string;
@@ -990,7 +999,7 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         maxLinks: number;
         availableTypes?: string[];
         isDynamic?: boolean;
-        dynamicMode?: string;
+        dynamicMode?: PortDynamicMode;
     }>): boolean;
     /** False when nothing changed: no such node or port, or the edit was a no-op. */
     updateNode(nodeId: string, patch: {
@@ -1076,7 +1085,7 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 }
 
 // FILE: diagram/types.d.ts
-import type { JsonObject } from '../core/model.js';
+import type { JsonObject, PortDynamicMode } from '../core/model.js';
 export interface PortTypeInit {
     name: string;
     color: string;
@@ -1094,7 +1103,7 @@ export interface PortInit {
     maxLinks?: number;
     availableTypes?: string[];
     isDynamic?: boolean;
-    dynamicMode?: string;
+    dynamicMode?: PortDynamicMode;
     isSibling?: boolean;
 }
 /** Mutable port properties. Port identity and direction remain stable. */
@@ -1107,7 +1116,7 @@ export declare class Port {
     maxLinks: number;
     availableTypes: string[];
     isDynamic: boolean;
-    dynamicMode: string;
+    dynamicMode: PortDynamicMode;
     isSibling: boolean;
     constructor(init: PortInit);
     clone(): Port;
@@ -1202,7 +1211,7 @@ export interface PortData {
     direction: PortDirection;
     availableTypes?: string[];
     isDynamic?: boolean;
-    dynamicMode?: string;
+    dynamicMode?: PortDynamicMode;
     isSibling?: boolean;
 }
 export interface NodeData {
@@ -1458,7 +1467,7 @@ export type { DiagramAction, DiagramActionState, } from './core/action-registry.
 export { DiagramCommandHistory } from './core/history.js';
 export type { DiagramCommand, DiagramHistoryListener, DiagramHistoryState, } from './core/history.js';
 export { DIAGRAM_DOCUMENT_VERSION } from './core/model.js';
-export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentVersion, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, } from './core/model.js';
+export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentVersion, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, PortDynamicMode, } from './core/model.js';
 export { createEditableDiagramPermissions, createDiagramNodeRuntimeState, createDiagramPortRuntimeState, createDiagramRuntimeState, cloneDiagramNodeErrors, cloneDiagramRuntimeState, createDiagramSelection, createDiagramViewState, createReadOnlyDiagramPermissions, } from './core/state.js';
 export { DIAGRAM_VIEW_STATE_VERSION, DiagramViewStateError, createDiagramViewStateDocument, parseDiagramViewState, serializeDiagramViewState, } from './core/view-state.js';
 export type { DiagramViewStateDocument } from './core/view-state.js';

@@ -299,3 +299,26 @@ test('a node runtime state without the errors map is tolerated, not a crash', ()
     assert.deepEqual(cloned.nodes.n1.errors, {});
     assert.equal(cloned.nodes.n1.active, true);
 });
+
+test('an unrecognised port dynamicMode degrades instead of making the document unloadable', () => {
+    // A scheme persisted before dynamicMode was a closed set can hold anything a
+    // JavaScript host wrote. Refusing to load it would brick the document, and
+    // every value other than "onConnect" already behaves identically.
+    const source = serializeDiagramDocument(createDiagramDocument({
+        nodes: [{ id: 'node', name: 'Node', inPorts: [{ id: 'in', name: 'In' }] }],
+    })).replace('"dynamicMode":""', '"dynamicMode":"auto"');
+
+    const document = parseDiagramDocument(source);
+    assert.equal(document.nodes[0].inPorts[0].dynamicMode, '');
+
+    // And what it accepts, it can serialize again.
+    assert.deepEqual(parseDiagramDocument(serializeDiagramDocument(document)), document);
+
+    // The known values still survive unchanged.
+    for (const dynamicMode of ['', 'manual', 'onConnect'] as const) {
+        const kept = createDiagramDocument({
+            nodes: [{ id: 'node', name: 'Node', inPorts: [{ id: 'in', name: 'In', dynamicMode }] }],
+        });
+        assert.equal(kept.nodes[0].inPorts[0].dynamicMode, dynamicMode);
+    }
+});

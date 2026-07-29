@@ -11,6 +11,8 @@ import { StockSharpDiagram } from './diagram/stocksharp-diagram.js';
 import { StockSharpCatalog } from './diagram/catalog.js';
 import { DiagramNode, Link, Node, Port, PortType } from './diagram/types.js';
 import type { FullscreenRequestedPayload } from './diagram/api.js';
+import { toPortDynamicMode } from './core/model.js';
+import type { PortDynamicMode } from './core/model.js';
 
 interface PalettePort {
 	key: string;
@@ -19,7 +21,7 @@ interface PalettePort {
 	maxLinks?: number;
 	availableTypes?: string[];
 	isDynamic?: boolean;
-	dynamicMode?: string;
+	dynamicMode?: PortDynamicMode;
 }
 
 interface PaletteElement {
@@ -257,7 +259,7 @@ function parsePalettePorts(value: unknown): PalettePort[] {
 			maxLinks: asFiniteNumber(port.maxLinks),
 			availableTypes: asArray(port.availableTypes).filter((item): item is string => typeof item === 'string'),
 			isDynamic: port.isDynamic === true,
-			dynamicMode: asString(port.dynamicMode),
+			dynamicMode: toPortDynamicMode(port.dynamicMode),
 		});
 	}
 	return ports;

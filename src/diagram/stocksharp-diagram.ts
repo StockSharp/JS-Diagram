@@ -6,7 +6,7 @@ import {
     parseDiagramViewState,
     serializeDiagramViewState,
 } from '../core/view-state.js';
-import type { DiagramDocument } from '../core/model.js';
+import type { DiagramDocument, PortDynamicMode } from '../core/model.js';
 import { DiagramActionRegistry } from '../core/action-registry.js';
 import type {
     DiagramGlobalErrorKind,
@@ -222,8 +222,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     /** False when nothing changed: no such node or port, or the edit was a no-op. */
     setNodePorts(
         nodeId: string,
-        inPorts: ReadonlyArray<{ key: string; name: string; description: string; type: string; maxLinks: number; availableTypes?: string[]; isDynamic?: boolean; dynamicMode?: string }>,
-        outPorts: ReadonlyArray<{ key: string; name: string; description: string; type: string; maxLinks: number; availableTypes?: string[]; isDynamic?: boolean; dynamicMode?: string }>,
+        inPorts: ReadonlyArray<{ key: string; name: string; description: string; type: string; maxLinks: number; availableTypes?: string[]; isDynamic?: boolean; dynamicMode?: PortDynamicMode }>,
+        outPorts: ReadonlyArray<{ key: string; name: string; description: string; type: string; maxLinks: number; availableTypes?: string[]; isDynamic?: boolean; dynamicMode?: PortDynamicMode }>,
     ): boolean {
         const current = this.canvas.findNode(nodeId);
         if (current === undefined) return false;

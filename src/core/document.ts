@@ -1,4 +1,5 @@
 import { setJsonKey } from './json.js';
+import { toPortDynamicMode } from './model.js';
 import {
     DIAGRAM_DOCUMENT_VERSION,
     type DiagramDocument,
@@ -8,6 +9,7 @@ import {
     type DiagramDocumentNode,
     type DiagramDocumentPort,
     type DiagramParameterSchema,
+    type PortDynamicMode,
     type JsonObject,
     type JsonValue,
 } from './model.js';
@@ -150,7 +152,7 @@ function normalizePort(value: unknown, path: string): DiagramDocumentPort {
         availableTypes: requireArray(input.availableTypes ?? [], `${path}.availableTypes`)
             .map((type, index) => requireString(type, `${path}.availableTypes[${index}]`)),
         isDynamic: requireBoolean(input.isDynamic ?? false, `${path}.isDynamic`),
-        dynamicMode: requireString(input.dynamicMode ?? '', `${path}.dynamicMode`),
+        dynamicMode: requirePortDynamicMode(input.dynamicMode ?? '', `${path}.dynamicMode`),
         isSibling: requireBoolean(input.isSibling ?? false, `${path}.isSibling`),
         metadata: cloneJsonObject(input.metadata ?? {}, `${path}.metadata`),
     };
@@ -225,7 +227,7 @@ function parsePort(value: unknown, path: string): DiagramDocumentPort {
         maxLinks: requireNumber(port.maxLinks, `${path}.maxLinks`),
         availableTypes: requireArray(port.availableTypes, `${path}.availableTypes`).map((type, index) => requireString(type, `${path}.availableTypes[${index}]`)),
         isDynamic: requireBoolean(port.isDynamic, `${path}.isDynamic`),
-        dynamicMode: requireString(port.dynamicMode, `${path}.dynamicMode`),
+        dynamicMode: requirePortDynamicMode(port.dynamicMode, `${path}.dynamicMode`),
         isSibling: requireBoolean(port.isSibling, `${path}.isSibling`),
         metadata: cloneJsonObject(port.metadata, `${path}.metadata`),
     }, path);
@@ -398,6 +400,18 @@ function requireArray(value: unknown, path: string): unknown[] {
 function requireString(value: unknown, path: string): string {
     if (typeof value !== 'string') throw new DiagramDocumentError('expected a string', path);
     return value;
+}
+
+/**
+ * Coerces rather than rejects. The set is closed in the types, which is where a
+ * typo gets caught, but a persisted scheme can carry anything a JavaScript host
+ * wrote before that -- and refusing to load it would brick the whole document
+ * over a field whose every value except 'onConnect' behaves identically. The
+ * type must still be a string, so a number or an object is a real error.
+ */
+function requirePortDynamicMode(value: unknown, path: string): PortDynamicMode {
+    const mode = requireString(value, path);
+    return toPortDynamicMode(mode);
 }
 
 function requireIdentifier(value: unknown, path: string): string {

@@ -7,11 +7,13 @@
 import { createDiagramDocument, parseDiagramDocument } from './core/document.js';
 import { DiagramCommandHistory } from './core/history.js';
 import { setJsonKey } from './core/json.js';
+import { toPortDynamicMode } from './core/model.js';
 import type {
     DiagramDocument,
     DiagramParameterSchema,
     JsonObject,
     JsonValue,
+    PortDynamicMode,
 } from './core/model.js';
 import type {
     DiagramGlobalErrorKind,
@@ -41,7 +43,7 @@ export interface PortInit {
     maxLinks?: number;
     availableTypes?: string[];
     isDynamic?: boolean;
-    dynamicMode?: string;
+    dynamicMode?: PortDynamicMode;
     isSibling?: boolean;
     metadata?: JsonObject;
 }
@@ -299,7 +301,7 @@ export class PortModel {
     maxLinks: number;
     availableTypes: string[];
     isDynamic: boolean;
-    dynamicMode: string;
+    dynamicMode: PortDynamicMode;
     isSibling: boolean;
     metadata: JsonObject;
     // layout cache (world coords), filled at draw time
@@ -314,7 +316,7 @@ export class PortModel {
         this.maxLinks = typeof init.maxLinks === 'number' ? init.maxLinks : 0;
         this.availableTypes = [...(init.availableTypes ?? [])];
         this.isDynamic = init.isDynamic ?? false;
-        this.dynamicMode = init.dynamicMode ?? '';
+        this.dynamicMode = toPortDynamicMode(init.dynamicMode);
         this.isSibling = init.isSibling ?? false;
         this.metadata = copyJsonObject(init.metadata);
     }

@@ -20,6 +20,19 @@ export interface DiagramParameterSchema {
     editorType: string;
 }
 
+/**
+ * How a dynamic port grows. Only 'onConnect' makes the editor add a typed
+ * sibling when a link lands on the port; '' and 'manual' leave it to the host.
+ * The renderer compares this with ===, so a value outside the set silently
+ * selects the do-nothing branch -- hence a union rather than a string.
+ */
+export type PortDynamicMode = '' | 'manual' | 'onConnect';
+
+/** Narrows an untyped value to the closed set, defaulting to the inert mode. */
+export function toPortDynamicMode(value: unknown): PortDynamicMode {
+    return value === 'manual' || value === 'onConnect' ? value : '';
+}
+
 export interface DiagramDocumentPort {
     id: string;
     name: string;
@@ -28,7 +41,7 @@ export interface DiagramDocumentPort {
     maxLinks: number;
     availableTypes: string[];
     isDynamic: boolean;
-    dynamicMode: string;
+    dynamicMode: PortDynamicMode;
     isSibling: boolean;
     metadata: JsonObject;
 }

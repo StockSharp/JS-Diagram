@@ -36,6 +36,7 @@ export type {
     JsonObject,
     JsonPrimitive,
     JsonValue,
+    PortDynamicMode,
 } from './core/model.js';
 
 export {

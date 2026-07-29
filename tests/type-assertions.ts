@@ -6,6 +6,7 @@
 import type { StockSharpCatalog } from '../src/diagram/catalog';
 import type { StockSharpPalette } from '../src/diagram/palette';
 import type { StockSharpDiagram } from '../src/diagram/stocksharp-diagram';
+import { Port } from '../src/diagram/types';
 
 declare const diagram: StockSharpDiagram;
 declare const catalog: StockSharpCatalog;
@@ -36,3 +37,14 @@ palette.on('nodeActivated', (payload) => payload.node.name.length);
 
 // @ts-expect-error - payload of a known event is typed, not unknown
 diagram.on('nodeAdded', (payload: { nope: string }) => payload.nope);
+
+// --- dynamicMode is a closed set --------------------------------------------
+// The renderer compares it with ===, so a value outside the set silently means
+// "do nothing" rather than "grow a sibling on connect".
+new Port({ id: 'p', name: 'P', isDynamic: true, dynamicMode: 'onConnect' });
+new Port({ id: 'p', name: 'P', dynamicMode: 'manual' });
+new Port({ id: 'p', name: 'P', dynamicMode: '' });
+// @ts-expect-error - wrong case
+new Port({ id: 'p', name: 'P', isDynamic: true, dynamicMode: 'onconnect' });
+// @ts-expect-error - not a mode at all
+new Port({ id: 'p', name: 'P', dynamicMode: 'whatever you like' });
