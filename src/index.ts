@@ -74,6 +74,7 @@ export type {
     DiagramRuntimeState,
     DiagramSelectedPort,
     DiagramSelection,
+    DiagramSnapshot,
     DiagramViewState,
 } from './core/state.js';
 

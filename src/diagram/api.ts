@@ -2,6 +2,7 @@ import type { DiagramDocument } from '../core/model.js';
 import type {
     DiagramRuntimeState,
     DiagramSelection,
+    DiagramSnapshot,
     DiagramViewState,
 } from '../core/state.js';
 import type { DiagramNode, Link, Port, PortDirection } from './types.js';
@@ -256,10 +257,10 @@ export interface DiagramEvents {
     nodeProperties: NodeChangePayload;
     nodeOpen: NodeChangePayload;
     nodeHelp: NodeChangePayload;
-    zoomChanged: DiagramViewState;
-    viewChanged: DiagramViewState;
-    selectionChanged: DiagramSelection;
-    runtimeStateChanged: { state: DiagramRuntimeState };
+    zoomChanged: DiagramSnapshot<DiagramViewState>;
+    viewChanged: DiagramSnapshot<DiagramViewState>;
+    selectionChanged: DiagramSnapshot<DiagramSelection>;
+    runtimeStateChanged: { state: DiagramSnapshot<DiagramRuntimeState> };
     undoStackChanged: { canUndo: boolean; canRedo: boolean };
     documentLoaded: { document: DiagramDocument };
     documentLoadFailed: DocumentLoadFailedPayload;

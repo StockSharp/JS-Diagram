@@ -48,3 +48,47 @@ new Port({ id: 'p', name: 'P', dynamicMode: '' });
 new Port({ id: 'p', name: 'P', isDynamic: true, dynamicMode: 'onconnect' });
 // @ts-expect-error - not a mode at all
 new Port({ id: 'p', name: 'P', dynamicMode: 'whatever you like' });
+
+// --- state snapshots are read-only ------------------------------------------
+// These getters return detached copies, so a mutation is silently discarded.
+// The type has to say so rather than inviting a read-modify-write that no-ops.
+// @ts-expect-error - the selection snapshot is not a way to change the selection
+diagram.getSelection().nodeIds.push('node');
+// @ts-expect-error - nor is it assignable field by field
+diagram.getSelection().primaryNodeId = 'node';
+// @ts-expect-error - the runtime snapshot is not a way to activate a node
+diagram.getRuntimeState().activeNodeId = 'node';
+// @ts-expect-error - the view snapshot is not a way to zoom
+diagram.getViewState().zoom = 2;
+// @ts-expect-error - permissions change through setInteractionPermissions
+diagram.getInteractionPermissions().paste = false;
+
+// Round-tripping a snapshot back through its setter still has to compile.
+diagram.setRuntimeState(diagram.getRuntimeState());
+diagram.setViewState(diagram.getViewState());
+diagram.setInteractionPermissions(diagram.getInteractionPermissions());
+diagram.setFullscreenLabels(diagram.getFullscreenLabels());
+
+// The snapshot has to be read-only all the way down, including through optional
+// object properties -- the node error slots are exactly that shape.
+// @ts-expect-error - an optional nested object is still part of the snapshot
+diagram.getRuntimeState().nodes.n1.errors.runtime!.message = 'deep write';
+// @ts-expect-error - a Record nested in a Record is too
+diagram.getRuntimeState().nodes.n1.ports.in.p1.value = 'deep write';
+// @ts-expect-error - and a nullable one
+diagram.getRuntimeState().globalError!.message = 'deep write';
+
+// Event payloads carry the same detached copies the getters return, so they are
+// snapshots too -- otherwise the read-only rule stops at the first subscriber.
+diagram.on('selectionChanged', (selection) => {
+    // @ts-expect-error - the payload is a snapshot, not a way to change the selection
+    selection.nodeIds.push('node');
+});
+diagram.on('runtimeStateChanged', ({ state }) => {
+    // @ts-expect-error - nor a way to activate a node
+    state.activeNodeId = 'node';
+});
+diagram.on('viewChanged', (view) => {
+    // @ts-expect-error - nor a way to zoom
+    view.zoom = 2;
+});

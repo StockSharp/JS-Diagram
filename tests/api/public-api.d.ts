@@ -557,6 +557,15 @@ export interface DiagramDocumentInput {
 }
 
 // FILE: core/state.d.ts
+/**
+ * Recursively read-only view of a state object. The snapshot accessors hand back
+ * detached copies, so writing to one is silently discarded -- this makes that a
+ * compile error instead. The setters accept it, so a snapshot still round-trips.
+ */
+export type DiagramSnapshot<T> = {
+    readonly [K in keyof T]: DiagramSnapshotValue<T[K]>;
+};
+type DiagramSnapshotValue<T> = T extends readonly (infer TItem)[] ? readonly DiagramSnapshotValue<TItem>[] : T extends object ? DiagramSnapshot<T> : T;
 export type DiagramPortDirection = 'in' | 'out';
 export type DiagramNodeErrorKind = 'runtime' | 'load';
 export type DiagramGlobalErrorKind = 'invalid' | 'load' | 'locked' | 'encrypted';
@@ -637,6 +646,7 @@ export declare function createDiagramNodeRuntimeState(): DiagramNodeRuntimeState
  * hand, so a state written before this field existed still has to be readable.
  */
 export declare function cloneDiagramNodeErrors(errors: DiagramNodeErrors | undefined | null): DiagramNodeErrors;
+export {};
 
 // FILE: core/view-state.d.ts
 import { type DiagramViewState } from './state.js';
@@ -655,7 +665,7 @@ export declare function serializeDiagramViewState(view: DiagramViewState, space?
 
 // FILE: diagram/api.d.ts
 import type { DiagramDocument } from '../core/model.js';
-import type { DiagramRuntimeState, DiagramSelection, DiagramViewState } from '../core/state.js';
+import type { DiagramRuntimeState, DiagramSelection, DiagramSnapshot, DiagramViewState } from '../core/state.js';
 import type { DiagramNode, Link, Port, PortDirection } from './types.js';
 /** What the fullscreen button calls itself, in the host page's language. */
 export interface DiagramFullscreenLabels {
@@ -859,11 +869,11 @@ export interface DiagramEvents {
     nodeProperties: NodeChangePayload;
     nodeOpen: NodeChangePayload;
     nodeHelp: NodeChangePayload;
-    zoomChanged: DiagramViewState;
-    viewChanged: DiagramViewState;
-    selectionChanged: DiagramSelection;
+    zoomChanged: DiagramSnapshot<DiagramViewState>;
+    viewChanged: DiagramSnapshot<DiagramViewState>;
+    selectionChanged: DiagramSnapshot<DiagramSelection>;
     runtimeStateChanged: {
-        state: DiagramRuntimeState;
+        state: DiagramSnapshot<DiagramRuntimeState>;
     };
     undoStackChanged: {
         canUndo: boolean;
@@ -958,7 +968,7 @@ export declare class StockSharpPalette extends EventEmitter<PaletteEvents> {
 
 // FILE: diagram/stocksharp-diagram.d.ts
 import type { DiagramDocument, PortDynamicMode } from '../core/model.js';
-import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramViewState } from '../core/state.js';
+import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramSnapshot, DiagramViewState } from '../core/state.js';
 import { EventEmitter } from './event-emitter.js';
 import type { DiagramEvents, ContextCommand, DiagramLoadOptions, DiagramFullscreenLabels, DiagramGridSettings, DiagramNodeBounds, DiagramPoint, DiagramOptions, DiagramScreenshotOptions, DiagramThemeOptions, LinkValidationResult, LinkValidator, NodeErrorKind, NodeErrorOptions } from './api.js';
 import { DiagramNode, Link, Port, type PortDirection, type PortUpdate } from './types.js';
@@ -973,7 +983,7 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     getPortPosition(nodeId: string, direction: PortDirection, portId: string): DiagramPoint | null;
     worldToView(x: number, y: number): DiagramPoint;
     setGridSnap(enabled: boolean, size?: number): void;
-    getGridSnap(): DiagramGridSettings;
+    getGridSnap(): DiagramSnapshot<DiagramGridSettings>;
     nudgeSelection(dx: number, dy: number): boolean;
     addLink(link: Link): boolean;
     validateLink(link: Link, excludeLinkId?: string): LinkValidationResult;
@@ -1017,8 +1027,8 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     setNodeMessage(nodeId: string, message: string): boolean;
     setNodeError(nodeId: string, message: string, options?: NodeErrorOptions): boolean;
     clearNodeError(nodeId: string, kind?: NodeErrorKind): boolean;
-    getRuntimeState(): DiagramRuntimeState;
-    setRuntimeState(state: DiagramRuntimeState): void;
+    getRuntimeState(): DiagramSnapshot<DiagramRuntimeState>;
+    setRuntimeState(state: DiagramSnapshot<DiagramRuntimeState>): void;
     clearRuntimeState(): void;
     setActiveNode(nodeId: string | null): boolean;
     setPortRuntimeState(nodeId: string, direction: PortDirection, portId: string, patch: Partial<DiagramPortRuntimeState>): boolean;
@@ -1031,22 +1041,22 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     transaction<T>(label: string, action: () => T): T;
     setShowNodeMessages(show: boolean): void;
     setReadOnly(readonly: boolean): void;
-    getInteractionPermissions(): DiagramInteractionPermissions;
+    getInteractionPermissions(): DiagramSnapshot<DiagramInteractionPermissions>;
     setInteractionPermissions(patch: Partial<DiagramInteractionPermissions>): void;
     applySocketTheme(): void;
     applyOverviewTheme(): void;
     setOverviewVisible(visible: boolean): void;
     zoomToFit(): void;
     setZoom(scale: number): void;
-    getViewState(): DiagramViewState;
-    setViewState(state: DiagramViewState): void;
+    getViewState(): DiagramSnapshot<DiagramViewState>;
+    setViewState(state: DiagramSnapshot<DiagramViewState>): void;
     /** Serializes only viewport preferences; strategy data stays in saveDocument(). */
     saveViewState(space?: number): string;
     /** Restores a versioned viewport snapshot produced by saveViewState(). */
     loadViewState(source: string | unknown): void;
     /** Detached PNG-ready canvas; use scope: 'content' for the complete scheme. */
     takeScreenshot(options?: DiagramScreenshotOptions): HTMLCanvasElement;
-    getSelection(): DiagramSelection;
+    getSelection(): DiagramSnapshot<DiagramSelection>;
     selectNodes(nodeIds: readonly string[]): void;
     selectLink(linkId: string | null): void;
     selectPort(nodeId: string, direction: PortDirection, portId: string): void;
@@ -1055,8 +1065,8 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     setFullscreenButtonVisible(visible: boolean): void;
     isFullscreenButtonVisible(): boolean;
     /** Text of the fullscreen button, for a host that renders in another language. */
-    setFullscreenLabels(labels: DiagramFullscreenLabels): void;
-    getFullscreenLabels(): DiagramFullscreenLabels;
+    setFullscreenLabels(labels: DiagramSnapshot<DiagramFullscreenLabels>): void;
+    getFullscreenLabels(): DiagramSnapshot<DiagramFullscreenLabels>;
     /** Updates only the control's state after the host changed its own layout. */
     setFullscreenState(fullscreen: boolean): void;
     setTheme(options: DiagramThemeOptions): void;
@@ -1476,7 +1486,7 @@ export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, Di
 export { createEditableDiagramPermissions, createDiagramNodeRuntimeState, createDiagramPortRuntimeState, createDiagramRuntimeState, cloneDiagramNodeErrors, cloneDiagramRuntimeState, createDiagramSelection, createDiagramViewState, createReadOnlyDiagramPermissions, } from './core/state.js';
 export { DIAGRAM_VIEW_STATE_VERSION, DiagramViewStateError, createDiagramViewStateDocument, parseDiagramViewState, serializeDiagramViewState, } from './core/view-state.js';
 export type { DiagramViewStateDocument } from './core/view-state.js';
-export type { DiagramErrorState, DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramNodeErrorKind, DiagramNodeErrors, DiagramNodePortRuntimeState, DiagramNodeRuntimeState, DiagramPortDirection, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelectedPort, DiagramSelection, DiagramViewState, } from './core/state.js';
+export type { DiagramErrorState, DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramNodeErrorKind, DiagramNodeErrors, DiagramNodePortRuntimeState, DiagramNodeRuntimeState, DiagramPortDirection, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelectedPort, DiagramSelection, DiagramSnapshot, DiagramViewState, } from './core/state.js';
 export { StockSharpDiagram, } from './diagram/stocksharp-diagram.js';
 export type { ContextCommand, ContextCommandPayload, ContextCommandState, ContextMenuRequestedPayload, DiagramEvents, DiagramClipboard, DiagramGridSettings, DiagramLoadOptions, DiagramNodeBounds, DiagramOptions, DiagramPoint, DiagramScreenshotOptions, DiagramScreenshotScope, DiagramThemeOptions, DocumentLoadFailedPayload, LinkChangePayload, LinkHoverPayload, LinkRelinkedPayload, LinkSelectedPayload, LinkValidationPayload, LinkValidationReason, LinkValidationResult, LinkValidator, LinkValidatorArgs, LoadFinishedPayload, NodeChangePayload, NodeErrorKind, NodeErrorOptions, NodeHoverPayload, NodeMovedPayload, NodeSelectedPayload, PortHoverPayload, PortClickAction, PortClickedPayload, PortSelectedPayload, } from './diagram/api.js';
 export { StockSharpCatalog } from './diagram/catalog.js';

@@ -1,3 +1,20 @@
+/**
+ * Recursively read-only view of a state object. The snapshot accessors hand back
+ * detached copies, so writing to one is silently discarded -- this makes that a
+ * compile error instead. The setters accept it, so a snapshot still round-trips.
+ */
+export type DiagramSnapshot<T> = {
+    readonly [K in keyof T]: DiagramSnapshotValue<T[K]>;
+};
+
+// Distributes over unions, so an optional or nullable object property keeps
+// being descended into instead of falling through as its writable self.
+type DiagramSnapshotValue<T> = T extends readonly (infer TItem)[]
+    ? readonly DiagramSnapshotValue<TItem>[]
+    : T extends object
+        ? DiagramSnapshot<T>
+        : T;
+
 export type DiagramPortDirection = 'in' | 'out';
 export type DiagramNodeErrorKind = 'runtime' | 'load';
 export type DiagramGlobalErrorKind = 'invalid' | 'load' | 'locked' | 'encrypted';

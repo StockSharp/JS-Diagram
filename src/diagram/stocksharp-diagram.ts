@@ -14,6 +14,7 @@ import type {
     DiagramPortRuntimeState,
     DiagramRuntimeState,
     DiagramSelection,
+    DiagramSnapshot,
     DiagramViewState,
 } from '../core/state.js';
 import {
@@ -176,7 +177,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.canvas.setGridSnap(enabled, size);
     }
 
-    getGridSnap(): DiagramGridSettings {
+    getGridSnap(): DiagramSnapshot<DiagramGridSettings> {
         return this.canvas.getGridSnap();
     }
 
@@ -266,11 +267,11 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return this.canvas.clearNodeError(nodeId, kind);
     }
 
-    getRuntimeState(): DiagramRuntimeState {
+    getRuntimeState(): DiagramSnapshot<DiagramRuntimeState> {
         return this.canvas.getRuntimeState();
     }
 
-    setRuntimeState(state: DiagramRuntimeState): void {
+    setRuntimeState(state: DiagramSnapshot<DiagramRuntimeState>): void {
         this.canvas.setRuntimeState(state);
     }
 
@@ -318,7 +319,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.canvas.setReadOnly(readonly);
     }
 
-    getInteractionPermissions(): DiagramInteractionPermissions {
+    getInteractionPermissions(): DiagramSnapshot<DiagramInteractionPermissions> {
         return this.canvas.getInteractionPermissions();
     }
 
@@ -347,11 +348,11 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.canvas.setZoom(scale);
     }
 
-    getViewState(): DiagramViewState {
+    getViewState(): DiagramSnapshot<DiagramViewState> {
         return this.canvas.getViewState();
     }
 
-    setViewState(state: DiagramViewState): void {
+    setViewState(state: DiagramSnapshot<DiagramViewState>): void {
         this.canvas.setViewState(state);
         this.overviewContainer?.classList.toggle('hidden', !state.overviewVisible);
     }
@@ -371,7 +372,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return this.canvas.takeScreenshot(options);
     }
 
-    getSelection(): DiagramSelection {
+    getSelection(): DiagramSnapshot<DiagramSelection> {
         return this.canvas.getSelection();
     }
 
@@ -406,12 +407,12 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     }
 
     /** Text of the fullscreen button, for a host that renders in another language. */
-    setFullscreenLabels(labels: DiagramFullscreenLabels): void {
+    setFullscreenLabels(labels: DiagramSnapshot<DiagramFullscreenLabels>): void {
         this.fullscreenLabels = labels;
         this.updateFullscreenButton();
     }
 
-    getFullscreenLabels(): DiagramFullscreenLabels {
+    getFullscreenLabels(): DiagramSnapshot<DiagramFullscreenLabels> {
         return { ...this.fullscreenLabels };
     }
 
