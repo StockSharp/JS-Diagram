@@ -167,3 +167,57 @@ test('runtime, view and selection state have independent fresh defaults', () => 
     assert.equal(runtimeA.nodes.node.active, true);
     assert.equal(runtimeA.nodes.node.ports.out.value.value, null);
 });
+
+test('a "__proto__" key in host JSON stays data and never becomes a prototype', () => {
+    const source = JSON.stringify({
+        version: DIAGRAM_DOCUMENT_VERSION,
+        nodes: [{
+            id: 'node-1',
+            typeId: 'node',
+            name: 'Node',
+            description: '',
+            groupName: 'Common',
+            x: 0,
+            y: 0,
+            color: '#d7d7d7',
+            border: '#8c8c8c',
+            icon: '',
+            message: '',
+            openAction: '',
+            inPorts: [],
+            outPorts: [],
+            parameters: [],
+            // Computed keys, not plain "__proto__:" -- in an object literal that
+            // form sets the prototype instead of creating the key JSON carries.
+            paramValues: { ['__proto__']: 'value' },
+            metadata: {},
+        }],
+        links: [],
+        metadata: { ['__proto__']: { injected: true }, keep: 1 },
+    });
+
+    const document = parseDiagramDocument(source);
+
+    // The prototype must be untouched and the key must survive as ordinary data.
+    assert.equal(Object.getPrototypeOf(document.metadata), Object.prototype);
+    assert.equal((document.metadata as { injected?: unknown }).injected, undefined);
+    assert.deepEqual(Object.keys(document.metadata).sort(), ['__proto__', 'keep']);
+    assert.deepEqual(document.nodes[0].paramValues.__proto__, 'value');
+
+    // Whatever parse accepts, serialize and clone must accept as well.
+    const roundTripped = parseDiagramDocument(serializeDiagramDocument(document));
+    assert.deepEqual(roundTripped, document);
+    assert.deepEqual(cloneDiagramDocument(document), document);
+});
+
+test('a nested "__proto__" key is preserved instead of being silently dropped', () => {
+    // Written through JSON.parse, not an object literal: in a literal the
+    // "__proto__" key sets the prototype, which is exactly what JSON does not do.
+    const metadata = JSON.parse('{"inner":{"__proto__":{"x":9},"kept":true}}') as JsonObject;
+    const document = createDiagramDocument({ metadata });
+
+    const inner = document.metadata.inner as JsonObject;
+    assert.equal(Object.getPrototypeOf(inner), Object.prototype);
+    assert.deepEqual(Object.keys(inner).sort(), ['__proto__', 'kept']);
+    assert.deepEqual(parseDiagramDocument(serializeDiagramDocument(document)), document);
+});

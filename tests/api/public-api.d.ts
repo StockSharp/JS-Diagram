@@ -442,6 +442,18 @@ export declare class DiagramCommandHistory {
     clear(): void;
 }
 
+// FILE: core/json.d.ts
+/**
+ * Stores a key that JSON can legitimately carry but plain assignment cannot hold.
+ *
+ * `JSON.parse` produces `__proto__` as an ordinary own key, yet writing it back
+ * with `target[key] = value` hits the inherited `__proto__` setter: the value is
+ * dropped and the object's prototype is replaced instead. A document parsed that
+ * way loses data and stops satisfying the parser's own "plain object" guard, so
+ * anything the parser accepted could no longer be serialized or cloned.
+ */
+export declare function setJsonKey<T>(target: Record<string, T>, key: string, value: T): void;
+
 // FILE: core/model.d.ts
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue = JsonPrimitive | JsonObject | JsonValue[];

@@ -6,6 +6,7 @@
 
 import { createDiagramDocument, parseDiagramDocument } from './core/document.js';
 import { DiagramCommandHistory } from './core/history.js';
+import { setJsonKey } from './core/json.js';
 import type {
     DiagramDocument,
     DiagramParameterSchema,
@@ -258,7 +259,7 @@ function copyJsonValue(value: JsonValue): JsonValue {
 function copyJsonObject(value: JsonObject | undefined): JsonObject {
     if (value === undefined) return {};
     const result: JsonObject = {};
-    for (const [key, item] of Object.entries(value)) result[key] = copyJsonValue(item);
+    for (const [key, item] of Object.entries(value)) setJsonKey(result, key, copyJsonValue(item));
     return result;
 }
 
@@ -1117,7 +1118,7 @@ export class Diagram {
     setNodeParamValue(nodeId: string, name: string, value: string | undefined): boolean {
         return this.updateNodeState(nodeId, 'set node parameter', (node) => {
             if (value === undefined) delete node.paramValues[name];
-            else node.paramValues[name] = value;
+            else setJsonKey(node.paramValues, name, value);
         });
     }
 

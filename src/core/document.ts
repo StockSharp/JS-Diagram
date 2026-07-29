@@ -1,3 +1,4 @@
+import { setJsonKey } from './json.js';
 import {
     DIAGRAM_DOCUMENT_VERSION,
     type DiagramDocument,
@@ -298,7 +299,7 @@ function validateUniquePorts(ports: readonly DiagramDocumentPort[], path: string
 function cloneStringRecord(value: unknown, path: string): Record<string, string> {
     const object = requireObject(value, path);
     const result: Record<string, string> = {};
-    for (const [key, item] of Object.entries(object)) result[key] = requireString(item, `${path}.${key}`);
+    for (const [key, item] of Object.entries(object)) setJsonKey(result, key, requireString(item, `${path}.${key}`));
     return result;
 }
 
@@ -309,7 +310,7 @@ function cloneJsonObject(value: unknown, path: string, ancestors = new WeakSet<o
     const result: JsonObject = {};
     try {
         for (const [key, item] of Object.entries(object)) {
-            result[key] = cloneJsonValue(item, `${path}.${key}`, ancestors);
+            setJsonKey(result, key, cloneJsonValue(item, `${path}.${key}`, ancestors));
         }
     } finally {
         ancestors.delete(object);
