@@ -1967,3 +1967,48 @@ test('the catalog copies a plain node definition too, not just a Node instance',
     assert.equal(stored.parameters.length, 1);
     assert.equal(stored.parameters[0].defaultValue, '20');
 });
+
+test('a dashed link survives loading a document and saving it back', () => {
+    const { diagram } = makeDiagram();
+
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, style: 'dashed' }],
+    }));
+
+    assert.equal(diagram.saveDocument().links[0].style, 'dashed');
+});
+
+test('zones survive loading a document and saving it back', () => {
+    const { diagram } = makeDiagram();
+
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [{ id: 'a', name: 'A' }],
+        zones: [{ id: 'colo', name: 'Colocation', x: -20, y: -20, width: 400, height: 260, color: '#d8c79a' }],
+    }));
+
+    assert.deepEqual(diagram.saveDocument().zones, [{
+        id: 'colo',
+        name: 'Colocation',
+        x: -20,
+        y: -20,
+        width: 400,
+        height: 260,
+        color: '#d8c79a',
+        metadata: {},
+    }]);
+});
+
+test('loading a document without zones clears the ones already on the canvas', () => {
+    const { diagram } = makeDiagram();
+
+    diagram.loadDocument(createDiagramDocument({
+        zones: [{ id: 'colo', name: 'Colocation', x: 0, y: 0, width: 100, height: 100 }],
+    }));
+    diagram.loadDocument(createDiagramDocument({ nodes: [{ id: 'a', name: 'A' }] }));
+
+    assert.deepEqual(diagram.saveDocument().zones, []);
+});

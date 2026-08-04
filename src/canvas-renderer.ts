@@ -9,6 +9,8 @@ import { DiagramCommandHistory } from './core/history.js';
 import { setJsonKey } from './core/json.js';
 import { toPortDynamicMode } from './core/model.js';
 import type {
+    DiagramDocumentZone,
+    DiagramLinkStyle,
     DiagramDocument,
     DiagramParameterSchema,
     JsonObject,
@@ -83,6 +85,8 @@ export interface LinkInit {
     fromPort: string;
     to: string;
     toPort: string;
+    /** Solid unless the link is one that may not be there - see DiagramLinkStyle. */
+    style?: DiagramLinkStyle;
     metadata?: JsonObject;
 }
 
@@ -101,6 +105,8 @@ export interface DiagramOptions {
     gridColor?: string;
     /** Snap dragged nodes to a world-space grid. Defaults to false for the low-level renderer. */
     gridSnap?: boolean;
+    /** Tint for a zone that names no colour of its own. */
+    zoneColor?: string;
     /** Positive world-space grid step. Defaults to 28. */
     gridSize?: number;
     /** Optional explicit socket-type → colour map; unknown types hash to a hue. */
@@ -424,6 +430,7 @@ export class LinkModel {
         public toPort: string,
         id: string = '',
         metadata?: JsonObject,
+        public style: DiagramLinkStyle = 'solid',
     ) {
         this.id = id;
         this.metadata = copyJsonObject(metadata);
@@ -437,6 +444,7 @@ export class LinkModel {
             fromPort: this.fromPort,
             to: this.to,
             toPort: this.toPort,
+            style: this.style,
             metadata: copyJsonObject(this.metadata),
         };
     }
@@ -504,6 +512,7 @@ export class Diagram {
 
     private nodes: NodeModel[] = [];
     private links: LinkModel[] = [];
+    private zones: DiagramDocumentZone[] = [];
     private idSeq = 1;
     private linkSeq = 1;
     private documentMetadata: JsonObject = {};
@@ -827,7 +836,7 @@ export class Diagram {
             this.emit('linkValidation', { fromNode: fn, from: fp, toNode: tn, to: tp, ...validation });
             if (!validation.allowed) return false;
         }
-        const link = new LinkModel(init.from, init.fromPort, init.to, init.toPort, init.id ?? this.nextLinkId(), init.metadata);
+        const link = new LinkModel(init.from, init.fromPort, init.to, init.toPort, init.id ?? this.nextLinkId(), init.metadata, init.style ?? 'solid');
         if (this.links.some((l) => l.id === link.id)) return false;
         this.links.splice(clamp(Math.trunc(index), 0, this.links.length), 0, link);
         this.emit('linkAdded', { link });
@@ -1200,7 +1209,7 @@ export class Diagram {
             if (this.links.some((existing) => existing.id === id)) {
                 throw new Error(`ssdiagram: duplicate link id "${id}"`);
             }
-            const model = new LinkModel(link.from, link.fromPort, link.to, link.toPort, id, link.metadata);
+            const model = new LinkModel(link.from, link.fromPort, link.to, link.toPort, id, link.metadata, link.style ?? 'solid');
             if (!this.links.some((existing) => existing.key() === model.key())) this.links.push(model);
         }
         for (const node of this.nodes) {
@@ -1232,9 +1241,11 @@ export class Diagram {
                 fromPort: link.from.portId,
                 to: link.to.nodeId,
                 toPort: link.to.portId,
+                style: link.style,
                 metadata: link.metadata,
             })),
         );
+        this.zones = document.zones.map((zone) => ({ ...zone, metadata: copyJsonObject(zone.metadata) }));
         this.documentMetadata = copyJsonObject(document.metadata);
     }
 
@@ -1245,8 +1256,10 @@ export class Diagram {
                 id: link.id,
                 from: { nodeId: link.from, portId: link.fromPort },
                 to: { nodeId: link.to, portId: link.toPort },
+                style: link.style,
                 metadata: link.metadata,
             })),
+            zones: this.zones.map((zone) => ({ ...zone, metadata: copyJsonObject(zone.metadata) })),
             metadata: this.documentMetadata,
         });
     }
@@ -2507,7 +2520,10 @@ export class Diagram {
         if (options.grid) this.drawGrid();
         ctx.setTransform(this.dpr * this.scale, 0, 0, this.dpr * this.scale,
             this.dpr * this.offX, this.dpr * (this.offY + introDy));
-        // Links first. Each link jumps over the verticals of the links
+        // Zones sit under everything: they say where things are, and a place that painted over
+        // its occupants would be worse than no place at all.
+        this.drawZones();
+        // Links next. Each link jumps over the verticals of the links
         // drawn before it (deterministic bridge — Link.JumpOver parity).
         const prior: Seg[] = [];   // segments of links already drawn
         const hoveredNode = this.hoverPort?.node ?? this.hoverNode;
@@ -2528,7 +2544,7 @@ export class Diagram {
             const color = state === 'sel' ? this.selectionColor() : state === 'hov' ? this.linkHoverColor() : baseColor;
             const width = state === 'sel' ? 3 : state === 'hov' ? 2.6 : 2;
             const pts = this.routeLink(a, b, new Set([l.from, l.to]));
-            this.strokeRoute(pts, color, width, prior);
+            this.strokeRoute(pts, color, width, prior, l.style);
             this.drawArrow(pts, color);
             for (let k = 1; k < pts.length; k += 1) {
                 const [x1, y1] = pts[k - 1];
@@ -2671,6 +2687,40 @@ export class Diagram {
         }
         return lines.length > 0 ? lines : [''];
     }
+    private drawZones(): void {
+        if (this.zones.length === 0) return;
+
+        const ctx = this.ctx;
+
+        for (const zone of this.zones) {
+            const tint = zone.color.length > 0 ? zone.color : (this.opts.zoneColor ?? '#8a8f98');
+            ctx.save();
+            roundRect(ctx, zone.x, zone.y, zone.width, zone.height, 10);
+            ctx.globalAlpha = 0.12;
+            ctx.fillStyle = tint;
+            ctx.fill();
+            ctx.globalAlpha = 0.5;
+            ctx.setLineDash([10, 6]);
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = tint;
+            ctx.stroke();
+            ctx.restore();
+
+            if (zone.name.length === 0) continue;
+
+            ctx.save();
+            ctx.globalAlpha = 0.75;
+            ctx.fillStyle = tint;
+            ctx.font = '600 12px Segoe UI, Tahoma, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            // Inside the top-left corner: a caption outside the box would collide with whatever
+            // sits above it, and the corner is the one spot a rectangle always has to spare.
+            ctx.fillText(zone.name, zone.x + 12, zone.y + 9, Math.max(0, zone.width - 24));
+            ctx.restore();
+        }
+    }
+
     private drawGrid(): void {
         const ctx = this.ctx;
         const step = this.gridSize * this.scale;
@@ -2796,10 +2846,12 @@ export class Diagram {
     // Symmetric jump-over: any segment of THIS link hops the perpendicular
     // segments of links drawn before it (H over earlier V, V over earlier
     // H). Exactly one bridge per real crossing, consistent everywhere.
-    private strokeRoute(pts: number[][], color: string, width: number, prior: Seg[]): void {
+    private strokeRoute(pts: number[][], color: string, width: number, prior: Seg[], style: DiagramLinkStyle = 'solid'): void {
         const ctx = this.ctx;
         ctx.strokeStyle = color;
         ctx.lineWidth = width;
+        // The dash is measured in world units, so it keeps its rhythm as the canvas is zoomed.
+        if (style === 'dashed') ctx.setLineDash([9, 6]);
         ctx.lineJoin = 'miter';
         ctx.lineCap = 'butt';
         ctx.beginPath();
@@ -2852,6 +2904,7 @@ export class Diagram {
             }
         }
         ctx.stroke();
+        ctx.setLineDash([]);
     }
     private drawArrow(pts: number[][], color: string): void {
         const n = pts.length;

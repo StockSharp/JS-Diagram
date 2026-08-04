@@ -322,3 +322,95 @@ test('an unrecognised port dynamicMode degrades instead of making the document u
         assert.equal(kept.nodes[0].inPorts[0].dynamicMode, dynamicMode);
     }
 });
+
+test('a link keeps the style it was given and defaults to solid', () => {
+    const document = createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }, { id: 'alt', name: 'Alt' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [
+            { from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' } },
+            { from: { nodeId: 'a', portId: 'alt' }, to: { nodeId: 'b', portId: 'in' }, style: 'dashed' },
+        ],
+    });
+
+    assert.equal(document.links[0].style, 'solid');
+    assert.equal(document.links[1].style, 'dashed');
+});
+
+test('a link style survives a serialize and parse round trip', () => {
+    const document = createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, style: 'dashed' }],
+    });
+
+    const parsed = parseDiagramDocument(serializeDiagramDocument(document));
+
+    assert.equal(parsed.links[0].style, 'dashed');
+});
+
+test('a link style outside the set is rejected', () => {
+    assert.throws(() => createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        links: [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, style: 'wavy' as any }],
+    }), /style/);
+});
+
+test('a zone keeps its bounds, name and colour, and defaults what it can', () => {
+    const document = createDiagramDocument({
+        zones: [
+            { id: 'colo', name: 'Колокейшн', x: 10, y: 20, width: 300, height: 200, color: '#d8c79a' },
+            { id: 'plain', name: 'Plain', x: 0, y: 0, width: 100, height: 50 },
+        ],
+    });
+
+    assert.deepEqual(document.zones[0], {
+        id: 'colo',
+        name: 'Колокейшн',
+        x: 10,
+        y: 20,
+        width: 300,
+        height: 200,
+        color: '#d8c79a',
+        metadata: {},
+    });
+    assert.equal(document.zones[1].color, '');
+});
+
+test('zones survive a serialize and parse round trip', () => {
+    const document = createDiagramDocument({
+        zones: [{ id: 'colo', name: 'Colo', x: 5, y: 6, width: 70, height: 80, color: '#abcdef' }],
+    });
+
+    assert.deepEqual(parseDiagramDocument(serializeDiagramDocument(document)).zones, document.zones);
+});
+
+test('a document without zones still parses, and reports none', () => {
+    const parsed = parseDiagramDocument(serializeDiagramDocument(createDiagramDocument({})));
+
+    assert.deepEqual(parsed.zones, []);
+});
+
+test('a zone with a negative size is rejected', () => {
+    assert.throws(
+        () => createDiagramDocument({ zones: [{ id: 'z', name: 'Z', x: 0, y: 0, width: -1, height: 10 }] }),
+        /width/,
+    );
+});
+
+test('two zones cannot share an id', () => {
+    assert.throws(() => createDiagramDocument({
+        zones: [
+            { id: 'z', name: 'One', x: 0, y: 0, width: 10, height: 10 },
+            { id: 'z', name: 'Two', x: 0, y: 0, width: 10, height: 10 },
+        ],
+    }), /duplicate zone id/);
+});

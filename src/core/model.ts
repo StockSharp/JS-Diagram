@@ -72,11 +72,43 @@ export interface DiagramDocumentEndpoint {
     portId: string;
 }
 
+/**
+ * How a link is drawn. A dashed link reads as one that may or may not be there -
+ * an optional hop, a path taken only in some deployments - which a solid line
+ * cannot say. The renderer compares this with ===, so a value outside the set
+ * would silently fall through to solid; hence a union rather than a string.
+ */
+export type DiagramLinkStyle = 'solid' | 'dashed';
+
+/** Narrows an untyped value to the closed set, defaulting to a plain line. */
+export function toDiagramLinkStyle(value: unknown): DiagramLinkStyle {
+    return value === 'dashed' ? 'dashed' : 'solid';
+}
+
 export interface DiagramDocumentLink {
     /** Stable identity used by selection, relinking and history. */
     id: string;
     from: DiagramDocumentEndpoint;
     to: DiagramDocumentEndpoint;
+    style: DiagramLinkStyle;
+    metadata: JsonObject;
+}
+
+/**
+ * A labelled rectangle drawn behind the nodes. It says where things are rather
+ * than what they do - a colocation cage, a tenant boundary, a process - which no
+ * arrangement of nodes and links can state on its own. A zone owns nothing: the
+ * nodes that sit on it are not its children, so moving one changes no membership.
+ */
+export interface DiagramDocumentZone {
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    /** Empty means the renderer picks its own neutral tint. */
+    color: string;
     metadata: JsonObject;
 }
 
@@ -87,6 +119,7 @@ export interface DiagramDocument {
     version: DiagramDocumentVersion;
     nodes: DiagramDocumentNode[];
     links: DiagramDocumentLink[];
+    zones: DiagramDocumentZone[];
     metadata: JsonObject;
 }
 
@@ -100,13 +133,20 @@ export type DiagramDocumentNodeInput = Pick<DiagramDocumentNode, 'id' | 'name'>
         outPorts?: readonly DiagramDocumentPortInput[];
     };
 
-export type DiagramDocumentLinkInput = Omit<DiagramDocumentLink, 'id' | 'metadata'> & {
+export type DiagramDocumentLinkInput = Omit<DiagramDocumentLink, 'id' | 'style' | 'metadata'> & {
     id?: string;
+    style?: DiagramLinkStyle;
+    metadata?: JsonObject;
+};
+
+export type DiagramDocumentZoneInput = Omit<DiagramDocumentZone, 'color' | 'metadata'> & {
+    color?: string;
     metadata?: JsonObject;
 };
 
 export interface DiagramDocumentInput {
     nodes?: readonly DiagramDocumentNodeInput[];
     links?: readonly DiagramDocumentLinkInput[];
+    zones?: readonly DiagramDocumentZoneInput[];
     metadata?: JsonObject;
 }

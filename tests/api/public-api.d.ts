@@ -1,5 +1,5 @@
 // FILE: canvas-renderer.d.ts
-import type { DiagramDocument, DiagramParameterSchema, JsonObject, PortDynamicMode } from './core/model.js';
+import type { DiagramLinkStyle, DiagramDocument, DiagramParameterSchema, JsonObject, PortDynamicMode } from './core/model.js';
 import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramViewState } from './core/state.js';
 export type PortDirection = 'in' | 'out';
 export type PortClickAction = 'leftClick' | 'rightClick';
@@ -48,6 +48,8 @@ export interface LinkInit {
     fromPort: string;
     to: string;
     toPort: string;
+    /** Solid unless the link is one that may not be there - see DiagramLinkStyle. */
+    style?: DiagramLinkStyle;
     metadata?: JsonObject;
 }
 export type DiagramNodeSnapshot = DiagramNodeInit & Required<Pick<DiagramNodeInit, 'id' | 'typeId' | 'name' | 'color' | 'border' | 'x' | 'y'>> & {
@@ -64,6 +66,8 @@ export interface DiagramOptions {
     gridColor?: string;
     /** Snap dragged nodes to a world-space grid. Defaults to false for the low-level renderer. */
     gridSnap?: boolean;
+    /** Tint for a zone that names no colour of its own. */
+    zoneColor?: string;
     /** Positive world-space grid step. Defaults to 28. */
     gridSize?: number;
     /** Optional explicit socket-type → colour map; unknown types hash to a hue. */
@@ -272,9 +276,10 @@ export declare class LinkModel {
     fromPort: string;
     to: string;
     toPort: string;
+    style: DiagramLinkStyle;
     readonly id: string;
     readonly metadata: JsonObject;
-    constructor(from: string, fromPort: string, to: string, toPort: string, id?: string, metadata?: JsonObject);
+    constructor(from: string, fromPort: string, to: string, toPort: string, id?: string, metadata?: JsonObject, style?: DiagramLinkStyle);
     key(): string;
     toInit(): LinkInit & {
         id: string;
@@ -412,7 +417,7 @@ export declare class DiagramActionRegistry<TId extends string, TContext> {
 // FILE: core/document.d.ts
 import { type DiagramDocument, type DiagramDocumentInput } from './model.js';
 export { DIAGRAM_DOCUMENT_VERSION } from './model.js';
-export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentVersion, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, } from './model.js';
+export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramLinkStyle, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentZone, DiagramDocumentZoneInput, DiagramDocumentVersion, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, } from './model.js';
 export declare class DiagramDocumentError extends Error {
     readonly path: string;
     constructor(message: string, path?: string);
@@ -526,11 +531,38 @@ export interface DiagramDocumentEndpoint {
     nodeId: string;
     portId: string;
 }
+/**
+ * How a link is drawn. A dashed link reads as one that may or may not be there -
+ * an optional hop, a path taken only in some deployments - which a solid line
+ * cannot say. The renderer compares this with ===, so a value outside the set
+ * would silently fall through to solid; hence a union rather than a string.
+ */
+export type DiagramLinkStyle = 'solid' | 'dashed';
+/** Narrows an untyped value to the closed set, defaulting to a plain line. */
+export declare function toDiagramLinkStyle(value: unknown): DiagramLinkStyle;
 export interface DiagramDocumentLink {
     /** Stable identity used by selection, relinking and history. */
     id: string;
     from: DiagramDocumentEndpoint;
     to: DiagramDocumentEndpoint;
+    style: DiagramLinkStyle;
+    metadata: JsonObject;
+}
+/**
+ * A labelled rectangle drawn behind the nodes. It says where things are rather
+ * than what they do - a colocation cage, a tenant boundary, a process - which no
+ * arrangement of nodes and links can state on its own. A zone owns nothing: the
+ * nodes that sit on it are not its children, so moving one changes no membership.
+ */
+export interface DiagramDocumentZone {
+    id: string;
+    name: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    /** Empty means the renderer picks its own neutral tint. */
+    color: string;
     metadata: JsonObject;
 }
 export declare const DIAGRAM_DOCUMENT_VERSION: 1;
@@ -539,6 +571,7 @@ export interface DiagramDocument {
     version: DiagramDocumentVersion;
     nodes: DiagramDocumentNode[];
     links: DiagramDocumentLink[];
+    zones: DiagramDocumentZone[];
     metadata: JsonObject;
 }
 export type DiagramDocumentPortInput = Pick<DiagramDocumentPort, 'id' | 'name'> & Partial<Omit<DiagramDocumentPort, 'id' | 'name'>>;
@@ -546,13 +579,19 @@ export type DiagramDocumentNodeInput = Pick<DiagramDocumentNode, 'id' | 'name'> 
     inPorts?: readonly DiagramDocumentPortInput[];
     outPorts?: readonly DiagramDocumentPortInput[];
 };
-export type DiagramDocumentLinkInput = Omit<DiagramDocumentLink, 'id' | 'metadata'> & {
+export type DiagramDocumentLinkInput = Omit<DiagramDocumentLink, 'id' | 'style' | 'metadata'> & {
     id?: string;
+    style?: DiagramLinkStyle;
+    metadata?: JsonObject;
+};
+export type DiagramDocumentZoneInput = Omit<DiagramDocumentZone, 'color' | 'metadata'> & {
+    color?: string;
     metadata?: JsonObject;
 };
 export interface DiagramDocumentInput {
     nodes?: readonly DiagramDocumentNodeInput[];
     links?: readonly DiagramDocumentLinkInput[];
+    zones?: readonly DiagramDocumentZoneInput[];
     metadata?: JsonObject;
 }
 

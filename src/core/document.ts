@@ -6,8 +6,10 @@ import {
     type DiagramDocumentEndpoint,
     type DiagramDocumentInput,
     type DiagramDocumentLink,
+    type DiagramLinkStyle,
     type DiagramDocumentNode,
     type DiagramDocumentPort,
+    type DiagramDocumentZone,
     type DiagramParameterSchema,
     type PortDynamicMode,
     type JsonObject,
@@ -21,10 +23,13 @@ export type {
     DiagramDocumentInput,
     DiagramDocumentLink,
     DiagramDocumentLinkInput,
+    DiagramLinkStyle,
     DiagramDocumentNode,
     DiagramDocumentNodeInput,
     DiagramDocumentPort,
     DiagramDocumentPortInput,
+    DiagramDocumentZone,
+    DiagramDocumentZoneInput,
     DiagramDocumentVersion,
     DiagramParameterSchema,
     JsonObject,
@@ -70,10 +75,22 @@ export function createDiagramDocument(input: DiagramDocumentInput = {}): Diagram
         }
         return normalizeLink({ ...link, id }, `$.links[${index}]`);
     });
+    const rawZones = mapElements(input.zones, '$.zones');
+    const usedZoneIds = new Set<string>();
+    const zones = rawZones.map((zone, index) => {
+        const normalized = normalizeZone(zone, `$.zones[${index}]`);
+        if (usedZoneIds.has(normalized.id)) {
+            throw new DiagramDocumentError(`duplicate zone id "${normalized.id}"`, `$.zones[${index}].id`);
+        }
+        usedZoneIds.add(normalized.id);
+        return normalized;
+    });
+
     const document: DiagramDocument = {
         version: DIAGRAM_DOCUMENT_VERSION,
         nodes,
         links,
+        zones,
         metadata: cloneJsonObject(input.metadata ?? {}, '$.metadata'),
     };
     validateDocument(document);
@@ -108,6 +125,11 @@ export function parseDiagramDocument(source: string | unknown): DiagramDocument 
         version: DIAGRAM_DOCUMENT_VERSION,
         nodes: requireArray(root.nodes, '$.nodes').map((node, index) => parseNode(node, `$.nodes[${index}]`)),
         links: requireArray(root.links, '$.links').map((link, index) => parseLink(link, `$.links[${index}]`)),
+        // Zones arrived after the first documents were written, so their absence is not a fault:
+        // an older file simply has none, and reading it must not need a migration step.
+        zones: root.zones === undefined || root.zones === null
+            ? []
+            : requireArray(root.zones, '$.zones').map((zone, index) => normalizeZone(zone, `$.zones[${index}]`)),
         metadata: cloneJsonObject(root.metadata, '$.metadata'),
     };
     validateDocument(document);
@@ -182,8 +204,41 @@ function normalizeLink(value: unknown, path: string): DiagramDocumentLink {
         id: requireIdentifier(input.id, `${path}.id`),
         from: normalizeEndpoint(input.from, `${path}.from`),
         to: normalizeEndpoint(input.to, `${path}.to`),
+        style: requireLinkStyle(input.style, `${path}.style`),
         metadata: cloneJsonObject(input.metadata ?? {}, `${path}.metadata`),
     };
+}
+
+// A style the caller misspelled is a drawing that quietly loses its meaning, so it is refused
+// rather than defaulted - unlike an absent one, which simply means a plain line.
+function requireLinkStyle(value: unknown, path: string): DiagramLinkStyle {
+    if (value === undefined || value === null) return 'solid';
+    if (value !== 'solid' && value !== 'dashed') {
+        throw new DiagramDocumentError(`unknown link style "${String(value)}"`, path);
+    }
+    return value;
+}
+
+function normalizeZone(value: unknown, path: string): DiagramDocumentZone {
+    const input = requireStructure(value, path);
+    return {
+        id: requireIdentifier(input.id, `${path}.id`),
+        name: requireString(input.name, `${path}.name`),
+        x: requireNumber(input.x, `${path}.x`),
+        y: requireNumber(input.y, `${path}.y`),
+        width: requirePositiveSize(input.width, `${path}.width`),
+        height: requirePositiveSize(input.height, `${path}.height`),
+        color: input.color === undefined || input.color === null ? '' : requireString(input.color, `${path}.color`),
+        metadata: cloneJsonObject(input.metadata ?? {}, `${path}.metadata`),
+    };
+}
+
+// A zone with no area cannot be pointed at, and a negative one paints outside itself, so the
+// size is refused rather than clamped - a caller that computed it wrong wants to hear about it.
+function requirePositiveSize(value: unknown, path: string): number {
+    const size = requireNumber(value, path);
+    if (!(size > 0)) throw new DiagramDocumentError('size must be greater than zero', path);
+    return size;
 }
 
 function normalizeEndpoint(value: unknown, path: string): DiagramDocumentEndpoint {
@@ -257,6 +312,7 @@ function parseLink(value: unknown, path: string): DiagramDocumentLink {
         id: requireString(link.id, `${path}.id`),
         from: parseEndpoint(link.from, `${path}.from`),
         to: parseEndpoint(link.to, `${path}.to`),
+        style: link.style === undefined ? undefined : requireLinkStyle(link.style, `${path}.style`),
         metadata: cloneJsonObject(link.metadata, `${path}.metadata`),
     }, path);
 }
