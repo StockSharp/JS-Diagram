@@ -1521,7 +1521,7 @@ export type { DiagramAction, DiagramActionState, } from './core/action-registry.
 export { DiagramCommandHistory } from './core/history.js';
 export type { DiagramCommand, DiagramHistoryListener, DiagramHistoryState, } from './core/history.js';
 export { DIAGRAM_DOCUMENT_VERSION } from './core/model.js';
-export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentVersion, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, PortDynamicMode, } from './core/model.js';
+export type { DiagramDocument, DiagramDocumentEndpoint, DiagramDocumentInput, DiagramDocumentLink, DiagramDocumentLinkInput, DiagramDocumentNode, DiagramDocumentNodeInput, DiagramDocumentPort, DiagramDocumentPortInput, DiagramDocumentVersion, DiagramDocumentZone, DiagramDocumentZoneInput, DiagramLinkStyle, DiagramParameterSchema, JsonObject, JsonPrimitive, JsonValue, PortDynamicMode, } from './core/model.js';
 export { createEditableDiagramPermissions, createDiagramNodeRuntimeState, createDiagramPortRuntimeState, createDiagramRuntimeState, cloneDiagramNodeErrors, cloneDiagramRuntimeState, createDiagramSelection, createDiagramViewState, createReadOnlyDiagramPermissions, } from './core/state.js';
 export { DIAGRAM_VIEW_STATE_VERSION, DiagramViewStateError, createDiagramViewStateDocument, parseDiagramViewState, serializeDiagramViewState, } from './core/view-state.js';
 export type { DiagramViewStateDocument } from './core/view-state.js';
