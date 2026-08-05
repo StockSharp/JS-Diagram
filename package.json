@@ -1,6 +1,6 @@
 {
   "name": "@stocksharp/diagram",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "Browser strategy-diagram editor for StockSharp with typed ports, palette, canvas rendering, persistence, and a TypeScript API.",
   "license": "SEE LICENSE IN LICENSE",
   "author": {
