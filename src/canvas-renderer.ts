@@ -1,3 +1,5 @@
+import type { DrawSurface } from './draw-surface.js';
+import { SvgSurface } from './svg-surface.js';
 // Internal dependency-free canvas renderer used by StockSharpDiagram.
 //
 // Dependency-free, pure 2D canvas. Demonstrates the hard parts: typed
@@ -507,7 +509,9 @@ function colorLuminance(color: string | undefined): number {
 export class Diagram {
     private readonly host: HTMLElement;
     private readonly canvas: HTMLCanvasElement;
-    private ctx: CanvasRenderingContext2D;
+    // Typed as the surface, not the context: the on-screen path still passes the browser's own
+    // 2D context (it satisfies the interface structurally), while export can hand in an SVG one.
+    private ctx: DrawSurface;
     private readonly opts: DiagramOptions;
 
     private nodes: NodeModel[] = [];
@@ -1332,25 +1336,8 @@ export class Diagram {
             return copy;
         }
 
-        const pixelRatio = this.positiveScreenshotNumber(options.pixelRatio ?? this.dpr, 'pixelRatio');
-        const exportScale = scope === 'content'
-            ? this.positiveScreenshotNumber(options.scale ?? 1, 'scale')
-            : this.scale;
-        const padding = scope === 'content'
-            ? this.nonNegativeScreenshotNumber(options.padding ?? 32, 'padding')
-            : 0;
-        const bounds = scope === 'content' ? this.graphBounds() : null;
-        const width = scope === 'content'
-            ? Math.max(1, Math.ceil(((bounds?.maxX ?? 1) - (bounds?.minX ?? 0)) * exportScale + padding * 2))
-            : this.width;
-        const height = scope === 'content'
-            ? Math.max(1, Math.ceil(((bounds?.maxY ?? 1) - (bounds?.minY ?? 0)) * exportScale + padding * 2))
-            : this.height;
-        const pixelWidth = Math.ceil(width * pixelRatio);
-        const pixelHeight = Math.ceil(height * pixelRatio);
-        if (pixelWidth > 16384 || pixelHeight > 16384 || pixelWidth * pixelHeight > 268_435_456) {
-            throw new RangeError(`ssdiagram: screenshot is too large (${pixelWidth}x${pixelHeight})`);
-        }
+        const layout = this.exportLayout(scope, options);
+        const { pixelRatio, exportScale, padding, bounds, width, height, pixelWidth, pixelHeight } = layout;
 
         const output = document.createElement('canvas');
         output.width = pixelWidth;
@@ -1401,6 +1388,106 @@ export class Diagram {
             this.opts.background = previous.background;
         }
         return output;
+    }
+
+    // Everything an export needs to know about size and placement, for either output. Shared on
+    // purpose: a raster and a vector export of the same scope must frame the picture identically,
+    // and two copies of this arithmetic would eventually disagree about padding or where the origin
+    // sits. A block comment here would be lifted onto the next public member in the .d.ts.
+    private exportLayout(scope: DiagramScreenshotScope, options: DiagramScreenshotOptions) {
+        const pixelRatio = this.positiveScreenshotNumber(options.pixelRatio ?? this.dpr, 'pixelRatio');
+        const exportScale = scope === 'content'
+            ? this.positiveScreenshotNumber(options.scale ?? 1, 'scale')
+            : this.scale;
+        const padding = scope === 'content'
+            ? this.nonNegativeScreenshotNumber(options.padding ?? 32, 'padding')
+            : 0;
+        const bounds = scope === 'content' ? this.graphBounds() : null;
+        const width = scope === 'content'
+            ? Math.max(1, Math.ceil(((bounds?.maxX ?? 1) - (bounds?.minX ?? 0)) * exportScale + padding * 2))
+            : this.width;
+        const height = scope === 'content'
+            ? Math.max(1, Math.ceil(((bounds?.maxY ?? 1) - (bounds?.minY ?? 0)) * exportScale + padding * 2))
+            : this.height;
+        const pixelWidth = Math.ceil(width * pixelRatio);
+        const pixelHeight = Math.ceil(height * pixelRatio);
+
+        if (pixelWidth > 16384 || pixelHeight > 16384 || pixelWidth * pixelHeight > 268_435_456) {
+            throw new RangeError(`ssdiagram: screenshot is too large (${pixelWidth}x${pixelHeight})`);
+        }
+
+        return { pixelRatio, exportScale, padding, bounds, width, height, pixelWidth, pixelHeight };
+    }
+
+    /**
+     * The same picture takeScreenshot produces, as SVG.
+     *
+     * It is the renderer that draws it -- the surface underneath simply records instead of paints --
+     * so the vector output cannot drift from what the screen and the raster export show. Text keeps
+     * the on-screen metrics by measuring through a real 2D context.
+     *
+     * Scale and pixelRatio still frame the picture (they decide the viewBox), but nothing is
+     * resampled: the result is resolution-independent, which is the point of asking for it.
+     */
+    takeSvg(options: DiagramScreenshotOptions = {}): string {
+        if (this.destroyed) throw new Error('ssdiagram: cannot export a destroyed diagram');
+
+        const scope = options.scope ?? 'viewport';
+        if (scope !== 'viewport' && scope !== 'content') {
+            throw new RangeError(`ssdiagram: unsupported screenshot scope "${String(scope)}"`);
+        }
+
+        const { exportScale, padding, bounds, width, height } = this.exportLayout(scope, options);
+
+        const metrics = this.canvas.getContext('2d');
+        const surface = new SvgSurface({
+            width,
+            height,
+            background: options.background ?? this.opts.background ?? '#1b1b1f',
+            metrics: metrics ?? undefined,
+        });
+
+        const previous = {
+            ctx: this.ctx,
+            width: this.width,
+            height: this.height,
+            dpr: this.dpr,
+            scale: this.scale,
+            offX: this.offX,
+            offY: this.offY,
+            overviewVisible: this.overviewVisible,
+        };
+
+        try {
+            this.ctx = surface;
+            this.width = width;
+            this.height = height;
+            // 1: an SVG has no device pixels to multiply by, and the viewBox carries the size.
+            this.dpr = 1;
+            this.scale = exportScale;
+            this.offX = scope === 'content' && bounds !== null ? padding - bounds.minX * exportScale : previous.offX;
+            this.offY = scope === 'content' && bounds !== null ? padding - bounds.minY * exportScale : previous.offY;
+            this.overviewVisible = options.includeOverview ?? (scope === 'viewport' && previous.overviewVisible);
+
+            this.draw({
+                grid: options.includeGrid ?? true,
+                overview: this.overviewVisible,
+                selection: options.includeSelection ?? scope === 'viewport',
+                runtime: options.includeRuntimeState ?? true,
+                transient: false,
+            });
+        } finally {
+            this.ctx = previous.ctx;
+            this.width = previous.width;
+            this.height = previous.height;
+            this.dpr = previous.dpr;
+            this.scale = previous.scale;
+            this.offX = previous.offX;
+            this.offY = previous.offY;
+            this.overviewVisible = previous.overviewVisible;
+        }
+
+        return surface.toSvg();
     }
 
     private positiveScreenshotNumber(value: number, name: string): number {
@@ -3072,7 +3159,7 @@ export class Diagram {
     }
 }
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+function roundRect(ctx: DrawSurface, x: number, y: number, w: number, h: number, r: number): void {
     const rr = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
     ctx.moveTo(x + rr, y);

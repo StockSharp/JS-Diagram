@@ -372,6 +372,11 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return this.canvas.takeScreenshot(options);
     }
 
+    /** The same picture as takeScreenshot, as an SVG document. */
+    takeSvg(options: DiagramScreenshotOptions = {}): string {
+        return this.canvas.takeSvg(options);
+    }
+
     getSelection(): DiagramSnapshot<DiagramSelection> {
         return this.canvas.getSelection();
     }

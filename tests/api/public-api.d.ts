@@ -342,6 +342,17 @@ export declare class Diagram {
      * the whole graph without changing the visible viewport.
      */
     takeScreenshot(options?: DiagramScreenshotOptions): HTMLCanvasElement;
+    /**
+     * The same picture takeScreenshot produces, as SVG.
+     *
+     * It is the renderer that draws it -- the surface underneath simply records instead of paints --
+     * so the vector output cannot drift from what the screen and the raster export show. Text keeps
+     * the on-screen metrics by measuring through a real 2D context.
+     *
+     * Scale and pixelRatio still frame the picture (they decide the viewBox), but nothing is
+     * resampled: the result is resolution-independent, which is the point of asking for it.
+     */
+    takeSvg(options?: DiagramScreenshotOptions): string;
     getRuntimeState(): DiagramRuntimeState;
     setRuntimeState(state: DiagramRuntimeState): void;
     clearRuntimeState(): void;
@@ -1095,6 +1106,8 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     loadViewState(source: string | unknown): void;
     /** Detached PNG-ready canvas; use scope: 'content' for the complete scheme. */
     takeScreenshot(options?: DiagramScreenshotOptions): HTMLCanvasElement;
+    /** The same picture as takeScreenshot, as an SVG document. */
+    takeSvg(options?: DiagramScreenshotOptions): string;
     getSelection(): DiagramSnapshot<DiagramSelection>;
     selectNodes(nodeIds: readonly string[]): void;
     selectLink(linkId: string | null): void;
@@ -1308,6 +1321,59 @@ export interface PaletteGroupData {
     isGroup: true;
     expanded: boolean;
     visible: boolean;
+}
+
+// FILE: draw-surface.d.ts
+/**
+ * The drawing operations the renderer actually uses, and nothing more.
+ *
+ * The renderer paints straight onto a 2D context, which means the picture only ever exists as
+ * pixels: a screenshot can be taken, but there is no vector form to export. Naming the surface it
+ * draws against is what makes a second backend possible without a second renderer -- one that emits
+ * SVG. Two renderers would be two truths about how a node looks, and they would drift.
+ *
+ * The member list is deliberately a subset of CanvasRenderingContext2D with identical names and
+ * semantics. TypeScript matches types structurally, so the browser's own context satisfies this
+ * without a wrapper: the on-screen path keeps calling the real thing directly, at no cost and with
+ * no behaviour to re-verify.
+ */
+export interface DrawSurface {
+    fillStyle: string | CanvasGradient | CanvasPattern;
+    strokeStyle: string | CanvasGradient | CanvasPattern;
+    lineWidth: number;
+    lineJoin: CanvasLineJoin;
+    lineCap: CanvasLineCap;
+    globalAlpha: number;
+    font: string;
+    textAlign: CanvasTextAlign;
+    textBaseline: CanvasTextBaseline;
+    save(): void;
+    restore(): void;
+    setLineDash(segments: readonly number[]): void;
+    setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
+    translate(x: number, y: number): void;
+    rotate(angle: number): void;
+    beginPath(): void;
+    closePath(): void;
+    moveTo(x: number, y: number): void;
+    lineTo(x: number, y: number): void;
+    arc(x: number, y: number, radius: number, startAngle: number, endAngle: number, counterclockwise?: boolean): void;
+    arcTo(x1: number, y1: number, x2: number, y2: number, radius: number): void;
+    fill(): void;
+    stroke(): void;
+    clip(): void;
+    clearRect(x: number, y: number, w: number, h: number): void;
+    fillRect(x: number, y: number, w: number, h: number): void;
+    strokeRect(x: number, y: number, w: number, h: number): void;
+    fillText(text: string, x: number, y: number, maxWidth?: number): void;
+    /**
+     * Only `width` is read by the renderer. An SVG backend has no font engine of its own and
+     * borrows a real 2D context for this, so text lands in exactly the same place in both outputs.
+     */
+    measureText(text: string): {
+        width: number;
+    };
+    drawImage(image: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void;
 }
 
 // FILE: embed.d.ts
@@ -1536,3 +1602,61 @@ export { DiagramNode, Link, Node, Port, PortType, } from './diagram/types.js';
 export type { DiagramNodeInit, LinkEndpoint, LinkInit, NodeData, NodeInit, PaletteGroupData, PaletteNodeData, ParamSchema, PortData, PortDirection, PortInit, PortUpdate, PortTypeInit, } from './diagram/types.js';
 export { destroyRenderedDiagram, renderAll, renderFromInline, renderFromSource, renderScheme, } from './embed.js';
 export type { DiagramEmbedHandle, DiagramEmbedScheme, DiagramEmbedSchemeLink, DiagramEmbedSchemeNode, } from './embed.js';
+
+// FILE: svg-surface.d.ts
+import type { DrawSurface } from './draw-surface.js';
+export interface SvgSurfaceOptions {
+    width: number;
+    height: number;
+    /** Painted as a full-size rect before anything else. Omit to leave the drawing transparent. */
+    background?: string;
+    /** Borrowed only for measureText; the SVG never draws on it. */
+    metrics?: CanvasRenderingContext2D;
+}
+export declare class SvgSurface implements DrawSurface {
+    /** Path being built by moveTo/lineTo/arc/arcTo, in the units the caller passes. */
+    constructor(options: SvgSurfaceOptions);
+    get fillStyle(): string | CanvasGradient | CanvasPattern;
+    set fillStyle(value: string | CanvasGradient | CanvasPattern);
+    get strokeStyle(): string | CanvasGradient | CanvasPattern;
+    set strokeStyle(value: string | CanvasGradient | CanvasPattern);
+    get lineWidth(): number;
+    set lineWidth(value: number);
+    get lineJoin(): CanvasLineJoin;
+    set lineJoin(value: CanvasLineJoin);
+    get lineCap(): CanvasLineCap;
+    set lineCap(value: CanvasLineCap);
+    get globalAlpha(): number;
+    set globalAlpha(value: number);
+    get font(): string;
+    set font(value: string);
+    get textAlign(): CanvasTextAlign;
+    set textAlign(value: CanvasTextAlign);
+    get textBaseline(): CanvasTextBaseline;
+    set textBaseline(value: CanvasTextBaseline);
+    save(): void;
+    restore(): void;
+    setLineDash(segments: readonly number[]): void;
+    setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
+    translate(x: number, y: number): void;
+    rotate(angle: number): void;
+    beginPath(): void;
+    closePath(): void;
+    moveTo(x: number, y: number): void;
+    lineTo(x: number, y: number): void;
+    arc(cx: number, cy: number, r: number, start: number, end: number, ccw?: boolean): void;
+    arcTo(x1: number, y1: number, x2: number, y2: number, r: number): void;
+    fill(): void;
+    stroke(): void;
+    clip(): void;
+    clearRect(x: number, y: number, w: number, h: number): void;
+    fillRect(x: number, y: number, w: number, h: number): void;
+    strokeRect(x: number, y: number, w: number, h: number): void;
+    fillText(text: string, x: number, y: number): void;
+    measureText(text: string): {
+        width: number;
+    };
+    drawImage(image: CanvasImageSource, dx: number, dy: number, dw: number, dh: number): void;
+    /** The finished document. Safe to call more than once; it does not consume the recording. */
+    toSvg(): string;
+}
