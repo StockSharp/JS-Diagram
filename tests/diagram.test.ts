@@ -2067,6 +2067,59 @@ test('the built-in menu opens the export submenu and reports the chosen format',
     assert.equal(host.menu(), null);
 });
 
+test('the export submenu stays open while the pointer moves onto it', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source', x: 40, y: 40 })], []);
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    const menu = host.menu();
+    assert.ok(menu !== null);
+    const submenu = menu.descendants().find((element) => element.className === 'ssdiagram-context-menu-submenu');
+    assert.ok(submenu !== undefined);
+
+    menuItem(menu, 'Export as').dispatch('pointerenter');
+    assert.equal(submenu.style.display, 'block');
+
+    // Reaching an item means the pointer crosses into the submenu. If entering an item shut
+    // the panel it sits in, the submenu would vanish under the pointer and drop it onto the
+    // canvas -- which is what happens when submenu items are wired like top-level ones.
+    menuItem(menu, 'PNG image').dispatch('pointerenter');
+    assert.equal(submenu.style.display, 'block', 'the submenu closed itself as soon as it was pointed at');
+
+    const formats: string[] = [];
+    diagram.on('exportRequested', ({ format }) => formats.push(format));
+    menuItem(menu, 'PNG image').dispatch('click');
+    assert.deepEqual(formats, ['png']);
+});
+
+test('moving back to a plain item shuts the export submenu', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source', x: 40, y: 40 })], []);
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    const menu = host.menu();
+    assert.ok(menu !== null);
+    const submenu = menu.descendants().find((element) => element.className === 'ssdiagram-context-menu-submenu');
+    assert.ok(submenu !== undefined);
+
+    menuItem(menu, 'Export as').dispatch('pointerenter');
+    assert.equal(submenu.style.display, 'block');
+    menuItem(menu, 'Copy').dispatch('pointerenter');
+    assert.equal(submenu.style.display, 'none', 'an open submenu should not outlive the pointer leaving it');
+});
+
 test('a greyed item in the built-in menu is inert, not merely grey', async () => {
     installDom();
     const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');

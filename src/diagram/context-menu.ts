@@ -109,7 +109,7 @@ export class ContextMenuView {
 
         items.forEach((item, index) => {
             if ('group' in item) root.appendChild(this.groupEntry(owner, item));
-            else root.appendChild(this.commandEntry(owner, item.command, item.enabled));
+            else root.appendChild(this.commandEntry(owner, item.command, item.enabled, true));
             const id = 'group' in item ? item.group : item.command;
             if (SEPARATE_AFTER.has(id) && index < items.length - 1) root.appendChild(this.separator(owner));
         });
@@ -177,10 +177,15 @@ export class ContextMenuView {
         return button;
     }
 
-    private commandEntry(owner: Document, command: ContextCommand, enabled: boolean): HTMLElement {
+    // `closesSubmenu` separates the two places an item can live. A top-level item shuts any
+    // open submenu when the pointer arrives, the way menus everywhere behave. An item inside
+    // the submenu must not: reaching it means the pointer has entered that very panel, and
+    // closing it there would pull it out from under the pointer and drop the click on the
+    // canvas behind.
+    private commandEntry(owner: Document, command: ContextCommand, enabled: boolean, closesSubmenu: boolean): HTMLElement {
         const button = this.item(owner, label(command), enabled, false);
         this.on(button, 'pointerenter', () => {
-            this.closeSubmenu();
+            if (closesSubmenu) this.closeSubmenu();
             if (enabled) button.style.background = HOVER_BACKGROUND;
         });
         this.on(button, 'pointerleave', () => { button.style.background = 'transparent'; });
@@ -204,7 +209,7 @@ export class ContextMenuView {
         panel.className = SUBMENU_CLASS;
         panel.setAttribute('role', 'menu');
         Object.assign(panel.style, { position: 'absolute', left: '100%', top: '-5px', display: 'none' });
-        for (const child of group.commands) panel.appendChild(this.commandEntry(owner, child.command, child.enabled));
+        for (const child of group.commands) panel.appendChild(this.commandEntry(owner, child.command, child.enabled, false));
         host.appendChild(panel);
 
         const open = (): void => {
