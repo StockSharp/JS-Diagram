@@ -32,6 +32,9 @@ import type {
     DiagramEvents,
     DiagramClipboard,
     ContextCommand,
+    ContextCommandGroup,
+    ContextCommandState,
+    ContextMenuItemState,
     DiagramLoadOptions,
     DiagramFullscreenLabels,
     DiagramGridSettings,
@@ -58,7 +61,27 @@ interface ContextActionContext {
     selection: DiagramSelection;
     nodes: DiagramNode[];
     links: Link[];
+    /** The whole diagram, not the selection: export offers the picture as a whole. */
+    document: DiagramDocument;
 }
+
+type ContextMenuEntry = ContextCommand | { group: ContextCommandGroup; commands: readonly ContextCommand[] };
+
+/**
+ * Menu order, and the only place the nesting is declared. The registry is flat because
+ * every command must be runnable by id, so the shape of the menu cannot live there.
+ * A command missing from this list would be executable and never offered; the test suite
+ * walks both and refuses to let the two drift.
+ */
+const CONTEXT_MENU: readonly ContextMenuEntry[] = [
+    'undo', 'redo',
+    'cut', 'copy', 'paste',
+    'open',
+    'delete',
+    { group: 'export', commands: ['exportDocument', 'exportPng', 'exportSvg'] },
+    'properties',
+    'help',
+];
 
 export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private readonly div: HTMLElement;
@@ -514,11 +537,19 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return fallback !== null && this.canvas.pasteDocument(fallback).length > 0;
     }
 
-    getContextCommands(): Array<{ command: ContextCommand; enabled: boolean }> {
-        return this.contextActions.states(this.contextActionContext()).map(({ id, enabled }) => ({
-            command: id,
-            enabled,
-        }));
+    getContextCommands(): ContextMenuItemState[] {
+        const context = this.contextActionContext();
+        const state = (command: ContextCommand): ContextCommandState => ({
+            command,
+            enabled: this.contextActions.canExecute(command, context),
+        });
+        return CONTEXT_MENU.map((entry) => {
+            if (typeof entry === 'string') return state(entry);
+            const commands = entry.commands.map(state);
+            // A submenu that opens onto nothing but greyed items is itself dead, and
+            // saying so here spares every host from working the same thing out again.
+            return { group: entry.group, enabled: commands.some(({ enabled }) => enabled), commands };
+        });
     }
 
     executeContextCommand(command: ContextCommand): boolean {
@@ -805,6 +836,24 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
                     && (selection.nodeIds.length > 0 || selection.linkIds.length > 0),
                 execute: () => this.canvas.deleteSelection(),
             },
+            // Export asks rather than does. Where the result goes -- a download, an upload,
+            // a clipboard, a print preview -- is the host's decision, and so is which options
+            // to render with, so the control reports the request and stops there.
+            // Availability follows the diagram, not the selection: all three export the whole
+            // picture, and an empty diagram has none to give. They stay on in read-only mode,
+            // which forbids changing the diagram, not looking at it.
+            exportDocument: {
+                canExecute: ({ document }) => document.nodes.length > 0,
+                execute: () => this.emit('exportRequested', { format: 'document' }),
+            },
+            exportPng: {
+                canExecute: ({ document }) => document.nodes.length > 0,
+                execute: () => this.emit('exportRequested', { format: 'png' }),
+            },
+            exportSvg: {
+                canExecute: ({ document }) => document.nodes.length > 0,
+                execute: () => this.emit('exportRequested', { format: 'svg' }),
+            },
             properties: {
                 canExecute: ({ nodes }) => nodes.length > 0,
                 execute: ({ nodes }) => this.emit('nodeProperties', { nodes }),
@@ -823,6 +872,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         const linkIds = new Set(selection.linkIds);
         return {
             selection,
+            document,
             nodes: document.nodes
                 .filter((node) => nodeIds.has(node.id))
                 .map((node) => this.fromCanvasInit(node)),

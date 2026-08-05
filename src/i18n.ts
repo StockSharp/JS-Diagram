@@ -95,6 +95,13 @@ export interface DesignerI18n {
     copy?: string;
     paste?: string;
     ctxOpen?: string;
+    // Submenu title, and deliberately not `ctxExport` -- that one is the solution
+    // explorer's "export this strategy", a different action that a host may well word
+    // differently. Reads as its own item too: "Export as > SVG image".
+    ctxExportAs?: string;
+    ctxExportDocument?: string;
+    ctxExportPng?: string;
+    ctxExportSvg?: string;
     properties?: string;
     ctxHelp?: string;
     collapse?: string;

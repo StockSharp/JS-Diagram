@@ -112,7 +112,18 @@ export interface FullscreenRequestedPayload {
     fullscreen: boolean;
 }
 
-export type ContextCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'open' | 'delete' | 'properties' | 'help';
+export type ContextCommand =
+    | 'undo' | 'redo'
+    | 'cut' | 'copy' | 'paste'
+    | 'open' | 'delete'
+    | 'exportDocument' | 'exportPng' | 'exportSvg'
+    | 'properties' | 'help';
+
+/**
+ * Names a submenu rather than something to run. Deliberately outside ContextCommand:
+ * `executeContextCommand` takes commands, and a submenu label has nothing to execute.
+ */
+export type ContextCommandGroup = 'export';
 
 export interface ContextCommandPayload {
     command: ContextCommand;
@@ -125,6 +136,32 @@ export interface ContextCommandState {
     enabled: boolean;
 }
 
+/** A submenu: its own enabled state, plus the items to show when it opens. */
+export interface ContextCommandGroupState {
+    group: ContextCommandGroup;
+    enabled: boolean;
+    commands: ContextCommandState[];
+}
+
+/**
+ * One entry of the menu, in the order it should be drawn. Discriminate on `group`:
+ * an entry that has it is a submenu, an entry that does not is a command.
+ */
+export type ContextMenuItemState = ContextCommandState | ContextCommandGroupState;
+
+/** What an export request asks the host to produce. */
+export type ExportFormat = 'document' | 'png' | 'svg';
+
+/**
+ * The user picked something from the export submenu. Like `nodeProperties`, this is a
+ * request and nothing more: the control does not write files or open dialogs, so the
+ * host fulfils it with `saveDocument()`, `takeScreenshot()` or `takeSvg()` and its own
+ * options for scope, padding and background.
+ */
+export interface ExportRequestedPayload {
+    format: ExportFormat;
+}
+
 export interface ContextMenuRequestedPayload {
     x: number;
     y: number;
@@ -132,7 +169,7 @@ export interface ContextMenuRequestedPayload {
     link: Link | null;
     port: Port | null;
     portDirection: PortDirection | null;
-    commands: ContextCommandState[];
+    commands: ContextMenuItemState[];
 }
 
 export interface NodeSelectedPayload {
@@ -251,6 +288,7 @@ export interface DiagramEvents {
     loadFinished: LoadFinishedPayload;
     contextCommand: ContextCommandPayload;
     contextMenuRequested: ContextMenuRequestedPayload;
+    exportRequested: ExportRequestedPayload;
     undoRequested: NodeChangePayload & LinkChangePayload;
     redoRequested: NodeChangePayload & LinkChangePayload;
     nodeEdit: NodeChangePayload;

@@ -3,6 +3,22 @@ import test from 'node:test';
 
 import { Diagram, version, type DiagramNodeInit } from '../src/canvas-renderer';
 import { createDiagramDocument } from '../src/core/document';
+import type { ContextMenuItemState } from '../src/diagram/api';
+
+// The menu is a tree: most entries are commands, the export entry is a submenu. Tests that
+// only care whether something is available flatten it back into one lookup, group ids included.
+function commandStates(items: readonly ContextMenuItemState[]): Map<string, boolean> {
+    const states = new Map<string, boolean>();
+    for (const item of items) {
+        if ('group' in item) {
+            states.set(item.group, item.enabled);
+            for (const child of item.commands) states.set(child.command, child.enabled);
+        } else {
+            states.set(item.command, item.enabled);
+        }
+    }
+    return states;
+}
 
 class FakeCanvas {
     style: Record<string, string> = {};
@@ -1487,7 +1503,7 @@ test('context command registry executes built-ins and leaves host actions typed'
     ], [new Link({ outNode: 'source', outPort: 'out', inNode: 'sink', inPort: 'in' })]);
     diagram.selectNodes(['source']);
 
-    const states = new Map(diagram.getContextCommands().map(({ command, enabled }) => [command, enabled]));
+    const states = commandStates(diagram.getContextCommands());
     assert.equal(states.get('copy'), true);
     assert.equal(states.get('delete'), true);
     assert.equal(states.get('open'), true);
@@ -1501,7 +1517,7 @@ test('context command registry executes built-ins and leaves host actions typed'
     assert.equal(diagram.executeContextCommand('properties'), true);
     assert.deepEqual(executed, ['copy', 'properties']);
     assert.deepEqual(properties, ['source']);
-    assert.equal(new Map(diagram.getContextCommands().map(({ command, enabled }) => [command, enabled])).get('paste'), true);
+    assert.equal(commandStates(diagram.getContextCommands()).get('paste'), true);
 
     const linkId = diagram.saveDocument().links[0].id;
     diagram.selectLink(linkId);
@@ -1512,7 +1528,7 @@ test('context command registry executes built-ins and leaves host actions typed'
 
     diagram.setReadOnly(true);
     diagram.selectNodes(['source']);
-    const readOnlyStates = new Map(diagram.getContextCommands().map(({ command, enabled }) => [command, enabled]));
+    const readOnlyStates = commandStates(diagram.getContextCommands());
     assert.equal(readOnlyStates.get('copy'), true);
     assert.equal(readOnlyStates.get('open'), true);
     assert.equal(readOnlyStates.get('delete'), false);
@@ -1848,7 +1864,7 @@ test('a node keeps its load error when a runtime error is reported on top of it'
     assert.equal(diagram.getRuntimeState().nodes.damaged.errors.runtime, undefined);
 });
 
-test('every context command in the public union is actually registered', async () => {
+test('every context command in the public union is actually offered by the menu', async () => {
     installDom();
     const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
     const diagram = new StockSharpDiagram({
@@ -1856,13 +1872,116 @@ test('every context command in the public union is actually registered', async (
         catalog: new StockSharpCatalog(),
     });
 
-    // The menu is built from the registry, so a command that the union declares
-    // but nobody registered would simply be absent here -- and executing it would
-    // be a silent no-op rather than an error.
-    const commands = diagram.getContextCommands().map(({ command }) => command);
-    assert.deepEqual(commands.slice().sort(), [
-        'copy', 'cut', 'delete', 'help', 'open', 'paste', 'properties', 'redo', 'undo',
+    // Registration alone is no longer enough: the menu is laid out separately so a
+    // submenu can exist, so a command can now be registered and still never offered.
+    // Walking the tree is what proves both halves line up.
+    const offered: string[] = [];
+    for (const item of diagram.getContextCommands()) {
+        if ('group' in item) offered.push(...item.commands.map(({ command }) => command));
+        else offered.push(item.command);
+    }
+
+    assert.deepEqual(offered.slice().sort(), [
+        'copy', 'cut', 'delete', 'exportDocument', 'exportPng', 'exportSvg',
+        'help', 'open', 'paste', 'properties', 'redo', 'undo',
     ]);
+    assert.equal(new Set(offered).size, offered.length, 'a command listed twice would run from two menu entries');
+});
+
+test('the export submenu offers document, png and svg, and leaves the work to the host', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const diagram = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source' })], []);
+
+    const submenu = diagram.getContextCommands().find((item) => 'group' in item && item.group === 'export');
+    assert.ok(submenu !== undefined && 'group' in submenu, 'the export submenu is missing from the menu');
+    assert.deepEqual(submenu.commands.map(({ command }) => command), ['exportDocument', 'exportPng', 'exportSvg']);
+    assert.equal(submenu.enabled, true);
+
+    // Same contract as properties: the control reports the request and produces nothing
+    // itself, because only the host knows where the file is supposed to end up.
+    const formats: string[] = [];
+    const commands: string[] = [];
+    diagram.on('exportRequested', ({ format }) => formats.push(format));
+    diagram.on('contextCommand', ({ command }) => commands.push(command));
+
+    const before = JSON.stringify(diagram.saveDocument());
+    assert.equal(diagram.executeContextCommand('exportDocument'), true);
+    assert.equal(diagram.executeContextCommand('exportPng'), true);
+    assert.equal(diagram.executeContextCommand('exportSvg'), true);
+
+    assert.deepEqual(formats, ['document', 'png', 'svg']);
+    assert.deepEqual(commands, ['exportDocument', 'exportPng', 'exportSvg']);
+    assert.equal(JSON.stringify(diagram.saveDocument()), before, 'asking for an export must not change the diagram');
+});
+
+test('an empty diagram has nothing to export, and refuses rather than firing a request', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const diagram = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    let requests = 0;
+    diagram.on('exportRequested', () => { requests += 1; });
+
+    const empty = commandStates(diagram.getContextCommands());
+    assert.equal(empty.get('exportPng'), false);
+    assert.equal(empty.get('export'), false, 'a submenu whose every item is dead should not invite a click');
+
+    // A greyed item a host sends back anyway must still do nothing, or the disabled
+    // state is only a suggestion and the host becomes responsible for enforcing it.
+    assert.equal(diagram.executeContextCommand('exportPng'), false);
+    assert.equal(requests, 0);
+
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source' })], []);
+    const filled = commandStates(diagram.getContextCommands());
+    assert.equal(filled.get('export'), true);
+    assert.equal(filled.get('exportDocument'), true);
+    assert.equal(filled.get('exportSvg'), true);
+});
+
+test('export survives read-only, because exporting only reads', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const diagram = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source' })], []);
+    diagram.selectNodes(['source']);
+    diagram.setReadOnly(true);
+
+    const states = commandStates(diagram.getContextCommands());
+    assert.equal(states.get('exportDocument'), true);
+    assert.equal(states.get('exportPng'), true);
+    assert.equal(states.get('export'), true);
+    // The contrast that proves read-only actually took hold.
+    assert.equal(states.get('delete'), false);
+});
+
+test('a submenu label is not a command', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const diagram = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source' })], []);
+
+    let fired = 0;
+    diagram.on('contextCommand', () => { fired += 1; });
+
+    // 'export' names a submenu. TypeScript keeps it out of ContextCommand, but a host
+    // in plain JavaScript can still send it back, and clicking a submenu label must not
+    // be mistaken for choosing one of the items inside it.
+    assert.equal(diagram.executeContextCommand('export' as never), false);
+    assert.equal(fired, 0);
 });
 
 test('registerAll keeps class-based actions working', async () => {

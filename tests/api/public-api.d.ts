@@ -807,7 +807,12 @@ export interface FullscreenChangedPayload {
 export interface FullscreenRequestedPayload {
     fullscreen: boolean;
 }
-export type ContextCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'open' | 'delete' | 'properties' | 'help';
+export type ContextCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'open' | 'delete' | 'exportDocument' | 'exportPng' | 'exportSvg' | 'properties' | 'help';
+/**
+ * Names a submenu rather than something to run. Deliberately outside ContextCommand:
+ * `executeContextCommand` takes commands, and a submenu label has nothing to execute.
+ */
+export type ContextCommandGroup = 'export';
 export interface ContextCommandPayload {
     command: ContextCommand;
     nodes: DiagramNode[];
@@ -817,6 +822,28 @@ export interface ContextCommandState {
     command: ContextCommand;
     enabled: boolean;
 }
+/** A submenu: its own enabled state, plus the items to show when it opens. */
+export interface ContextCommandGroupState {
+    group: ContextCommandGroup;
+    enabled: boolean;
+    commands: ContextCommandState[];
+}
+/**
+ * One entry of the menu, in the order it should be drawn. Discriminate on `group`:
+ * an entry that has it is a submenu, an entry that does not is a command.
+ */
+export type ContextMenuItemState = ContextCommandState | ContextCommandGroupState;
+/** What an export request asks the host to produce. */
+export type ExportFormat = 'document' | 'png' | 'svg';
+/**
+ * The user picked something from the export submenu. Like `nodeProperties`, this is a
+ * request and nothing more: the control does not write files or open dialogs, so the
+ * host fulfils it with `saveDocument()`, `takeScreenshot()` or `takeSvg()` and its own
+ * options for scope, padding and background.
+ */
+export interface ExportRequestedPayload {
+    format: ExportFormat;
+}
 export interface ContextMenuRequestedPayload {
     x: number;
     y: number;
@@ -824,7 +851,7 @@ export interface ContextMenuRequestedPayload {
     link: Link | null;
     port: Port | null;
     portDirection: PortDirection | null;
-    commands: ContextCommandState[];
+    commands: ContextMenuItemState[];
 }
 export interface NodeSelectedPayload {
     node: DiagramNode;
@@ -913,6 +940,7 @@ export interface DiagramEvents {
     loadFinished: LoadFinishedPayload;
     contextCommand: ContextCommandPayload;
     contextMenuRequested: ContextMenuRequestedPayload;
+    exportRequested: ExportRequestedPayload;
     undoRequested: NodeChangePayload & LinkChangePayload;
     redoRequested: NodeChangePayload & LinkChangePayload;
     nodeEdit: NodeChangePayload;
@@ -1020,7 +1048,7 @@ export declare class StockSharpPalette extends EventEmitter<PaletteEvents> {
 import type { DiagramDocument, PortDynamicMode } from '../core/model.js';
 import type { DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelection, DiagramSnapshot, DiagramViewState } from '../core/state.js';
 import { EventEmitter } from './event-emitter.js';
-import type { DiagramEvents, ContextCommand, DiagramLoadOptions, DiagramFullscreenLabels, DiagramGridSettings, DiagramNodeBounds, DiagramPoint, DiagramOptions, DiagramScreenshotOptions, DiagramThemeOptions, LinkValidationResult, LinkValidator, NodeErrorKind, NodeErrorOptions } from './api.js';
+import type { DiagramEvents, ContextCommand, ContextMenuItemState, DiagramLoadOptions, DiagramFullscreenLabels, DiagramGridSettings, DiagramNodeBounds, DiagramPoint, DiagramOptions, DiagramScreenshotOptions, DiagramThemeOptions, LinkValidationResult, LinkValidator, NodeErrorKind, NodeErrorOptions } from './api.js';
 import { DiagramNode, Link, Port, type PortDirection, type PortUpdate } from './types.js';
 export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     constructor(options: DiagramOptions);
@@ -1135,10 +1163,7 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     deleteSelection(): void;
     copySelectionToClipboard(): Promise<boolean>;
     pasteSelectionFromClipboard(): Promise<boolean>;
-    getContextCommands(): Array<{
-        command: ContextCommand;
-        enabled: boolean;
-    }>;
+    getContextCommands(): ContextMenuItemState[];
     executeContextCommand(command: ContextCommand): boolean;
     clear(): void;
     load(nodes: DiagramNode[], links: Link[], options?: DiagramLoadOptions): void;
@@ -1493,6 +1518,10 @@ export interface DesignerI18n {
     copy?: string;
     paste?: string;
     ctxOpen?: string;
+    ctxExportAs?: string;
+    ctxExportDocument?: string;
+    ctxExportPng?: string;
+    ctxExportSvg?: string;
     properties?: string;
     ctxHelp?: string;
     collapse?: string;
@@ -1593,7 +1622,7 @@ export { DIAGRAM_VIEW_STATE_VERSION, DiagramViewStateError, createDiagramViewSta
 export type { DiagramViewStateDocument } from './core/view-state.js';
 export type { DiagramErrorState, DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramNodeErrorKind, DiagramNodeErrors, DiagramNodePortRuntimeState, DiagramNodeRuntimeState, DiagramPortDirection, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelectedPort, DiagramSelection, DiagramSnapshot, DiagramViewState, } from './core/state.js';
 export { StockSharpDiagram, } from './diagram/stocksharp-diagram.js';
-export type { ContextCommand, ContextCommandPayload, ContextCommandState, ContextMenuRequestedPayload, DiagramEvents, DiagramClipboard, DiagramGridSettings, DiagramLoadOptions, DiagramNodeBounds, DiagramOptions, DiagramPoint, DiagramScreenshotOptions, DiagramScreenshotScope, DiagramThemeOptions, DocumentLoadFailedPayload, LinkChangePayload, LinkHoverPayload, LinkRelinkedPayload, LinkSelectedPayload, LinkValidationPayload, LinkValidationReason, LinkValidationResult, LinkValidator, LinkValidatorArgs, LoadFinishedPayload, NodeChangePayload, NodeErrorKind, NodeErrorOptions, NodeHoverPayload, NodeMovedPayload, NodeSelectedPayload, PortHoverPayload, PortClickAction, PortClickedPayload, PortSelectedPayload, } from './diagram/api.js';
+export type { ContextCommand, ContextCommandGroup, ContextCommandGroupState, ContextCommandPayload, ContextCommandState, ContextMenuItemState, ContextMenuRequestedPayload, ExportFormat, ExportRequestedPayload, DiagramEvents, DiagramClipboard, DiagramGridSettings, DiagramLoadOptions, DiagramNodeBounds, DiagramOptions, DiagramPoint, DiagramScreenshotOptions, DiagramScreenshotScope, DiagramThemeOptions, DocumentLoadFailedPayload, LinkChangePayload, LinkHoverPayload, LinkRelinkedPayload, LinkSelectedPayload, LinkValidationPayload, LinkValidationReason, LinkValidationResult, LinkValidator, LinkValidatorArgs, LoadFinishedPayload, NodeChangePayload, NodeErrorKind, NodeErrorOptions, NodeHoverPayload, NodeMovedPayload, NodeSelectedPayload, PortHoverPayload, PortClickAction, PortClickedPayload, PortSelectedPayload, } from './diagram/api.js';
 export { StockSharpCatalog } from './diagram/catalog.js';
 export type { CatalogEvents } from './diagram/catalog.js';
 export { PALETTE_DRAG_MIME, StockSharpPalette, } from './diagram/palette.js';

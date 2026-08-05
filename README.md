@@ -188,6 +188,48 @@ Socket input is reported separately through `portClicked`, with
 never starts a wire. `contextMenuRequested` also includes the exact port when
 the menu was opened over a socket.
 
+### The context menu
+
+The control has no menu widget: right-click suppresses the browser's own menu
+and emits `contextMenuRequested` with page coordinates, whatever was hit, and
+the menu contents already resolved. Draw it however the host draws menus, then
+send the choice back through `executeContextCommand()`.
+
+`commands` is a tree in display order. An entry with a `group` is a submenu;
+anything else is a command. `enabled` is computed for both — a submenu is off
+when every item inside it is:
+
+```ts
+diagram.on('contextMenuRequested', ({ x, y, commands }) => {
+  showMenu(x, y, commands.map((item) => 'group' in item
+    ? { label: t(item.group), enabled: item.enabled, items: item.commands }
+    : { label: t(item.command), enabled: item.enabled }));
+});
+
+menu.on('pick', (command) => diagram.executeContextCommand(command));
+```
+
+`undo`, `redo`, `cut`, `copy`, `paste` and `delete` are carried out by the
+control itself. The rest are requests it cannot answer alone: `open`,
+`properties` and `help` raise `nodeOpen` / `nodeProperties` / `nodeHelp`, and
+the `export` submenu raises `exportRequested` with the chosen format. Nothing
+is produced until the host acts on it — only the host knows where the result
+should go, and with which options:
+
+```ts
+diagram.on('exportRequested', ({ format }) => {
+  if (format === 'document') return download('strategy.json', diagram.saveDocument());
+  const options = { scope: 'content', padding: 40 };
+  if (format === 'svg') return download('strategy.svg', diagram.takeSvg(options));
+  diagram.takeScreenshot(options).toBlob((blob) => download('strategy.png', blob));
+});
+```
+
+Export is offered whenever the diagram has a node, including in read-only mode,
+because it only reads. Menu labels come from the host's i18n bundle
+(`ctxExportAs`, `ctxExportDocument`, `ctxExportPng`, `ctxExportSvg`, and the
+keys named after the other commands).
+
 Runtime failures flash the node border before leaving it red. Errors found
 while loading a scheme use a red background. Hovering either state shows the
 full error text in a tooltip:

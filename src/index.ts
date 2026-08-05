@@ -87,9 +87,14 @@ export {
 
 export type {
     ContextCommand,
+    ContextCommandGroup,
+    ContextCommandGroupState,
     ContextCommandPayload,
     ContextCommandState,
+    ContextMenuItemState,
     ContextMenuRequestedPayload,
+    ExportFormat,
+    ExportRequestedPayload,
     DiagramEvents,
     DiagramClipboard,
     DiagramGridSettings,
