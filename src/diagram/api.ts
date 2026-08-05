@@ -18,6 +18,12 @@ export interface DiagramOptions {
     catalog: import('./catalog.js').StockSharpCatalog;
     /** Show the built-in top-right fullscreen request button. Defaults to true. */
     showFullscreenButton?: boolean;
+    /**
+     * Show the built-in context menu on right-click. Defaults to true, because the control
+     * suppresses the browser's own menu regardless. Turn it off to draw your own from
+     * `contextMenuRequested`, which is emitted either way.
+     */
+    showContextMenu?: boolean;
     /** Tooltip/aria text for that button. Defaults to English. */
     fullscreenLabels?: DiagramFullscreenLabels;
     overviewContainer?: HTMLElement | null;

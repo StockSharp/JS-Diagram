@@ -355,51 +355,54 @@ requireElement<HTMLButtonElement>('#undoBtn').addEventListener('click', () => {
 requireElement<HTMLButtonElement>('#redoBtn').addEventListener('click', () => {
     diagram.redo(); updateState();
 });
-requireElement<HTMLButtonElement>('#exportBtn').addEventListener('click', () => {
-    const image = diagram.takeScreenshot({
-        scope: 'content',
-        pixelRatio: 2,
-        padding: 40,
-        includeOverview: false,
-        includeSelection: false,
-    });
-    image.toBlob((blob) => {
-        if (blob === null) {
-            setStatus('The browser could not encode the diagram image.');
-            return;
-        }
-        const url = URL.createObjectURL(blob);
-        const anchor = document.createElement('a');
-        anchor.href = url;
-        anchor.download = 'stocksharp-strategy.png';
-        anchor.hidden = true;
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 0);
-        setStatus('Full strategy image exported.');
-    }, 'image/png');
-});
-requireElement<HTMLButtonElement>('#exportSvgBtn').addEventListener('click', () => {
-    // The same call and the same options as the PNG button above, so the two exports can be compared
-    // side by side -- the only difference is that this one stays sharp at any size.
-    const svg = diagram.takeSvg({
-        scope: 'content',
-        padding: 40,
-        includeOverview: false,
-        includeSelection: false,
-    });
-    const blob = new Blob([svg], { type: 'image/svg+xml' });
+function download(blob: Blob, filename: string): void {
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = 'stocksharp-strategy.svg';
+    anchor.download = filename;
     anchor.hidden = true;
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    setStatus('Full strategy exported as vector.');
+}
+
+// Same framing for every export, so the three outputs are the same picture in three forms.
+const exportOptions = { scope: 'content', padding: 40, includeOverview: false, includeSelection: false } as const;
+
+// The control offers Export in its context menu but produces nothing itself: only the host
+// knows where the result goes. This is that host, and the toolbar buttons below go through
+// the very same command, so the menu and the buttons cannot drift apart.
+diagram.on('exportRequested', ({ format }) => {
+    if (format === 'document') {
+        download(new Blob([JSON.stringify(diagram.saveDocument(), null, 2)], { type: 'application/json' }), 'stocksharp-strategy.json');
+        setStatus('Scheme exported as JSON.');
+        return;
+    }
+    if (format === 'svg') {
+        download(new Blob([diagram.takeSvg(exportOptions)], { type: 'image/svg+xml' }), 'stocksharp-strategy.svg');
+        setStatus('Full strategy exported as vector.');
+        return;
+    }
+    diagram.takeScreenshot({ ...exportOptions, pixelRatio: 2 }).toBlob((blob) => {
+        if (blob === null) {
+            setStatus('The browser could not encode the diagram image.');
+            return;
+        }
+        download(blob, 'stocksharp-strategy.png');
+        setStatus('Full strategy image exported.');
+    }, 'image/png');
+});
+
+diagram.on('nodeProperties', ({ nodes }) => {
+    setStatus(`Properties requested for ${nodes.map((node) => node.name).join(', ')}.`);
+});
+
+requireElement<HTMLButtonElement>('#exportBtn').addEventListener('click', () => {
+    diagram.executeContextCommand('exportPng');
+});
+requireElement<HTMLButtonElement>('#exportSvgBtn').addEventListener('click', () => {
+    diagram.executeContextCommand('exportSvg');
 });
 requireElement<HTMLButtonElement>('#runtimeErrorBtn').addEventListener('click', () => {
     diagram.setNodeError('orders', 'Order Builder failed: order volume is not configured.');

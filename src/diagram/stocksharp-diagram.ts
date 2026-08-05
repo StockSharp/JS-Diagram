@@ -27,6 +27,7 @@ import {
     type PortModel,
 } from '../canvas-renderer.js';
 import { StockSharpCatalog } from './catalog.js';
+import { ContextMenuView } from './context-menu.js';
 import { EventEmitter } from './event-emitter.js';
 import type {
     DiagramEvents,
@@ -102,6 +103,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private fullscreenButtonVisible = true;
     private fullscreenLabels: DiagramFullscreenLabels = { enter: 'Enter fullscreen', exit: 'Exit fullscreen' };
     private readonly contextActions = new DiagramActionRegistry<ContextCommand, ContextActionContext>();
+    private contextMenu: ContextMenuView | null = null;
 
     constructor(options: DiagramOptions) {
         super();
@@ -121,6 +123,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.prepareFullscreenButtonHost();
         this.fullscreenButton = this.createFullscreenButton();
         this.updateFullscreenButton();
+        this.setContextMenuEnabled(options.showContextMenu ?? true);
         this.registerContextActions();
         this.bindCanvasEvents();
         this.disposables.push(this.catalog.on('portTypesChanged', () => this.applySocketTheme()));
@@ -537,6 +540,29 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return fallback !== null && this.canvas.pasteDocument(fallback).length > 0;
     }
 
+    /**
+     * Turns the built-in menu on or off. Off leaves `contextMenuRequested` untouched, so a
+     * host that draws its own is only trading one menu for another, never losing the event.
+     */
+    setContextMenuEnabled(enabled: boolean): void {
+        if (enabled === (this.contextMenu !== null)) return;
+        if (!enabled) {
+            this.contextMenu?.destroy();
+            this.contextMenu = null;
+            return;
+        }
+        this.contextMenu = new ContextMenuView({
+            container: this.div,
+            // Through the public entry point, so the built-in menu is exactly as privileged
+            // as a host's own -- same guards, same contextCommand event.
+            execute: (command) => { this.executeContextCommand(command); },
+        });
+    }
+
+    isContextMenuEnabled(): boolean {
+        return this.contextMenu !== null;
+    }
+
     getContextCommands(): ContextMenuItemState[] {
         const context = this.contextActionContext();
         const state = (command: ContextCommand): ContextCommandState => ({
@@ -624,6 +650,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     destroy(): void {
         if (this.destroyed) return;
         this.destroyed = true;
+        this.contextMenu?.destroy();
+        this.contextMenu = null;
         for (const dispose of this.disposables.splice(0).reverse()) dispose();
         this.canvas.destroy();
     }
@@ -788,6 +816,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             }),
             this.canvas.on('undoStackChanged', (state) => this.emit('undoStackChanged', state)),
             this.canvas.on('contextMenu', ({ x, y, node, link, port }) => {
+                const commands = this.getContextCommands();
                 this.emit('contextMenuRequested', {
                     x,
                     y,
@@ -795,8 +824,11 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
                     link: link === null ? null : this.fromCanvasLink(link),
                     port: port === null ? null : this.fromCanvasPort(port.port),
                     portDirection: port?.port.direction ?? null,
-                    commands: this.getContextCommands(),
+                    commands,
                 });
+                // After the event, so a host that draws its own menu has already been told
+                // and can have switched this one off in the handler.
+                this.contextMenu?.show(x, y, commands);
             }),
         );
     }

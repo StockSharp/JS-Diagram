@@ -727,6 +727,12 @@ export interface DiagramOptions {
     catalog: import('./catalog.js').StockSharpCatalog;
     /** Show the built-in top-right fullscreen request button. Defaults to true. */
     showFullscreenButton?: boolean;
+    /**
+     * Show the built-in context menu on right-click. Defaults to true, because the control
+     * suppresses the browser's own menu regardless. Turn it off to draw your own from
+     * `contextMenuRequested`, which is emitted either way.
+     */
+    showContextMenu?: boolean;
     /** Tooltip/aria text for that button. Defaults to English. */
     fullscreenLabels?: DiagramFullscreenLabels;
     overviewContainer?: HTMLElement | null;
@@ -983,6 +989,23 @@ export declare class StockSharpCatalog extends EventEmitter<CatalogEvents> {
     getNodeTypes(): Node[];
 }
 
+// FILE: diagram/context-menu.d.ts
+import type { ContextCommand, ContextMenuItemState } from './api.js';
+export interface ContextMenuViewOptions {
+    /** Where the menu is appended. The diagram mount point, so it survives a fullscreened panel. */
+    container: HTMLElement;
+    /** Runs the picked command. The same entry point a host menu would use. */
+    execute: (command: ContextCommand) => void;
+}
+export declare class ContextMenuView {
+    constructor(options: ContextMenuViewOptions);
+    get isOpen(): boolean;
+    show(x: number, y: number, items: readonly ContextMenuItemState[]): void;
+    hide(): void;
+    destroy(): void;
+    /** Keeps the panel inside the viewport, flipping it left when it would run off the edge. */
+}
+
 // FILE: diagram/event-emitter.d.ts
 export type EventHandler<T> = (payload: T) => void;
 export declare class EventEmitter<TEvents extends object> {
@@ -1163,6 +1186,12 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     deleteSelection(): void;
     copySelectionToClipboard(): Promise<boolean>;
     pasteSelectionFromClipboard(): Promise<boolean>;
+    /**
+     * Turns the built-in menu on or off. Off leaves `contextMenuRequested` untouched, so a
+     * host that draws its own is only trading one menu for another, never losing the event.
+     */
+    setContextMenuEnabled(enabled: boolean): void;
+    isContextMenuEnabled(): boolean;
     getContextCommands(): ContextMenuItemState[];
     executeContextCommand(command: ContextCommand): boolean;
     clear(): void;

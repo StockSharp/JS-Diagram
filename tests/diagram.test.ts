@@ -85,19 +85,29 @@ class FakeCanvas {
     remove(): void { this.removed = true; }
 }
 
-class FakeButton {
+class FakeElement {
     style: Record<string, string> = {};
     hidden = false;
     removed = false;
+    disabled = false;
     type = '';
     className = '';
     title = '';
     innerHTML = '';
+    textContent = '';
+    readonly children: FakeElement[] = [];
     private readonly attributes = new Map<string, string>();
     private readonly listeners = new Map<string, Array<EventListenerOrEventListenerObject>>();
 
     setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
     getAttribute(name: string): string | null { return this.attributes.get(name) ?? null; }
+    appendChild<T extends FakeElement>(child: T): T {
+        this.children.push(child);
+        return child;
+    }
+    contains(node: unknown): boolean {
+        return node === this || this.children.some((child) => child.contains(node));
+    }
     addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
         const handlers = this.listeners.get(type) ?? [];
         handlers.push(listener);
@@ -106,15 +116,27 @@ class FakeButton {
     removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
         this.listeners.set(type, (this.listeners.get(type) ?? []).filter((handler) => handler !== listener));
     }
-    dispatch(type: string): void {
-        const event = { type, preventDefault: () => undefined } as Event;
+    dispatch(type: string, init: Record<string, unknown> = {}): void {
+        const event = { type, target: this, preventDefault: () => undefined, ...init } as unknown as Event;
         for (const listener of this.listeners.get(type) ?? []) {
             if (typeof listener === 'function') listener(event);
             else listener.handleEvent(event);
         }
     }
     remove(): void { this.removed = true; }
+
+    /** Every element in this subtree, so a test can look the menu up by its text. */
+    descendants(): FakeElement[] {
+        return this.children.flatMap((child) => [child, ...child.descendants()]);
+    }
+    /** The caption of a menu item. The submenu arrow lives in its own span and is not part of it. */
+    text(): string {
+        const label = this.children.find((child) => child.className === 'ssdiagram-context-menu-label');
+        return label?.textContent ?? this.textContent;
+    }
 }
+
+class FakeButton extends FakeElement {}
 
 class FakeHost {
     clientWidth = 800;
@@ -124,10 +146,19 @@ class FakeHost {
     canvas: FakeCanvas | null = null;
     button: FakeButton | null = null;
     classList = { toggle: () => false, add: () => undefined };
-    appendChild<T extends FakeCanvas | FakeButton>(child: T): T {
+    readonly children: Array<FakeCanvas | FakeElement> = [];
+    appendChild<T extends FakeCanvas | FakeElement>(child: T): T {
+        this.children.push(child);
         if (child instanceof FakeCanvas) this.canvas = child;
-        else this.button = child;
+        else if (child instanceof FakeButton) this.button = child;
         return child;
+    }
+    /** The live menu panel, if the control has one open. */
+    menu(): FakeElement | null {
+        for (const child of this.children) {
+            if (child instanceof FakeElement && !child.removed && child.className === 'ssdiagram-context-menu') return child;
+        }
+        return null;
     }
     getBoundingClientRect(): DOMRect {
         return { left: 0, top: 0, right: 800, bottom: 480, width: 800, height: 480, x: 0, y: 0, toJSON: () => ({}) };
@@ -158,14 +189,15 @@ class FakeWindow {
 
 function installDom(): FakeWindow {
     const fakeWindow = new FakeWindow();
-    const fakeDocument = {
+    const fakeDocument = Object.assign(new FakeElement(), {
         documentElement: {},
         createElement: (tag: string) => {
             if (tag === 'canvas') return new FakeCanvas();
             if (tag === 'button') return new FakeButton();
+            if (tag === 'div' || tag === 'span') return new FakeElement();
             throw new Error(`Unexpected element: ${tag}`);
         },
-    };
+    });
     Object.assign(globalThis, {
         window: fakeWindow,
         document: fakeDocument,
@@ -1963,6 +1995,151 @@ test('export survives read-only, because exporting only reads', async () => {
     assert.equal(states.get('export'), true);
     // The contrast that proves read-only actually took hold.
     assert.equal(states.get('delete'), false);
+});
+
+function menuItems(menu: FakeElement): FakeElement[] {
+    return menu.descendants().filter((element) => element.className === 'ssdiagram-context-menu-item');
+}
+
+function menuItem(menu: FakeElement, text: string): FakeElement {
+    const found = menuItems(menu).find((element) => element.text() === text);
+    if (found === undefined) {
+        throw new Error(`No menu item "${text}". Present: ${menuItems(menu).map((e) => e.text()).join(' | ')}`);
+    }
+    return found;
+}
+
+test('right-clicking opens the control own menu and picking an item runs the command', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source', x: 40, y: 40 })], []);
+    diagram.selectNodes(['source']);
+
+    assert.equal(host.menu(), null, 'nothing should be on screen before the click');
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    const menu = host.menu();
+    assert.ok(menu !== null, 'right-click left the browser menu suppressed and put nothing in its place');
+    assert.deepEqual(
+        menuItems(menu).map((item) => item.text()),
+        ['Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Open', 'Delete',
+            'Export as', 'Scheme', 'PNG image', 'SVG image', 'Properties', 'Help'],
+    );
+
+    const executed: string[] = [];
+    diagram.on('contextCommand', ({ command }) => executed.push(command));
+    menuItem(menu, 'Copy').dispatch('click');
+
+    assert.deepEqual(executed, ['copy']);
+    assert.equal(host.menu(), null, 'the menu should close once something was picked');
+});
+
+test('the built-in menu opens the export submenu and reports the chosen format', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source', x: 40, y: 40 })], []);
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    const menu = host.menu();
+    assert.ok(menu !== null);
+    const submenu = menu.descendants().find((element) => element.className === 'ssdiagram-context-menu-submenu');
+    assert.ok(submenu !== undefined, 'the export entry has no submenu');
+    assert.equal(submenu.style.display, 'none', 'a submenu should stay shut until it is pointed at');
+
+    menuItem(menu, 'Export as').dispatch('pointerenter');
+    assert.equal(submenu.style.display, 'block');
+
+    const formats: string[] = [];
+    diagram.on('exportRequested', ({ format }) => formats.push(format));
+    menuItem(menu, 'SVG image').dispatch('click');
+
+    assert.deepEqual(formats, ['svg']);
+    assert.equal(host.menu(), null);
+});
+
+test('a greyed item in the built-in menu is inert, not merely grey', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    const menu = host.menu();
+    assert.ok(menu !== null);
+    const paste = menuItem(menu, 'Paste');
+    assert.equal(paste.disabled, true, 'an empty clipboard should leave paste disabled');
+
+    let executed = 0;
+    diagram.on('contextCommand', () => { executed += 1; });
+    paste.dispatch('click');
+
+    assert.equal(executed, 0);
+    assert.ok(host.menu() !== null, 'a dead item should not even dismiss the menu');
+});
+
+test('a host that draws its own menu turns ours off and still gets the event', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+        showContextMenu: false,
+    });
+
+    let requests = 0;
+    diagram.on('contextMenuRequested', () => { requests += 1; });
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    assert.equal(diagram.isContextMenuEnabled(), false);
+    assert.equal(host.menu(), null, 'the built-in menu was switched off');
+    assert.equal(requests, 1, 'switching the menu off must not cost the host its event');
+
+    // And back on again, because a host may only want its own menu some of the time.
+    diagram.setContextMenuEnabled(true);
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    assert.ok(host.menu() !== null);
+    assert.equal(requests, 2);
+});
+
+test('the built-in menu is dismissed by a click elsewhere and by destroy', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const owner = globalThis.document as unknown as FakeElement;
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    const menu = host.menu();
+    assert.ok(menu !== null);
+
+    // A press inside the menu is a press on the way to picking something.
+    owner.dispatch('pointerdown', { target: menuItem(menu, 'Copy') });
+    assert.ok(host.menu() !== null, 'pressing inside the menu closed it');
+
+    owner.dispatch('pointerdown', { target: host.canvas });
+    assert.equal(host.menu(), null, 'a press outside should dismiss the menu');
+
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    assert.ok(host.menu() !== null);
+    diagram.destroy();
+    assert.equal(host.menu(), null, 'destroy left a menu behind');
 });
 
 test('a submenu label is not a command', async () => {
