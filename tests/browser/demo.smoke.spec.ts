@@ -9,7 +9,7 @@ test('demo exercises palette, theme, runtime errors and full-image export', asyn
     await expect(page.locator('#status')).toHaveText('Strategy model reset.');
     await expect(page.locator('#modelStats')).toContainText('7 nodes');
     const compactTools = page.locator('.demo-header .icon-only');
-    await expect(compactTools).toHaveCount(6);
+    await expect(compactTools).toHaveCount(7);
     expect(await compactTools.evaluateAll((buttons) => buttons.every((button) =>
         button.getBoundingClientRect().width <= 30))).toBe(true);
 
@@ -31,7 +31,51 @@ test('demo exercises palette, theme, runtime errors and full-image export', asyn
     const download = await downloadPromise;
     expect(download.suggestedFilename()).toBe('stocksharp-strategy.png');
     await expect(page.locator('#status')).toHaveText('Full strategy image exported.');
+
+    const svgPromise = page.waitForEvent('download');
+    await page.locator('#exportSvgBtn').click();
+    expect((await svgPromise).suggestedFilename()).toBe('stocksharp-strategy.svg');
+    await expect(page.locator('#status')).toHaveText('Full strategy exported as vector.');
     expect(pageErrors).toEqual([]);
+});
+
+test('the built-in context menu exports through its submenu', async ({ page }) => {
+    await page.goto('/demo/index.html');
+    const canvas = page.locator('#diagram canvas');
+    await expect(canvas).toHaveCount(1);
+
+    await canvas.click({ button: 'right', position: { x: 120, y: 120 } });
+    const menu = page.locator('.ssdiagram-context-menu');
+    await expect(menu).toBeVisible();
+
+    // The submenu opens on hover, and clicking an item inside it means the pointer travels
+    // into that panel. A real browser is the only place that path is honest: with synthetic
+    // events it is easy to miss a submenu that hides itself the moment it is pointed at,
+    // dropping the click onto the canvas behind.
+    await menu.locator('.ssdiagram-context-menu-item', { hasText: 'Export as' }).hover();
+    const submenu = page.locator('.ssdiagram-context-menu-submenu');
+    await expect(submenu).toBeVisible();
+
+    const downloadPromise = page.waitForEvent('download');
+    await submenu.locator('.ssdiagram-context-menu-item', { hasText: 'SVG image' }).click();
+    expect((await downloadPromise).suggestedFilename()).toBe('stocksharp-strategy.svg');
+    await expect(page.locator('#status')).toHaveText('Full strategy exported as vector.');
+    await expect(menu).toHaveCount(0);
+});
+
+test('right-click leaves a menu behind instead of only suppressing the browser one', async ({ page }) => {
+    await page.goto('/demo/index.html');
+    const canvas = page.locator('#diagram canvas');
+
+    await canvas.click({ button: 'right', position: { x: 120, y: 120 } });
+    const menu = page.locator('.ssdiagram-context-menu');
+    await expect(menu).toBeVisible();
+    // Availability is computed by the control, so an empty clipboard has to show through.
+    await expect(menu.locator('.ssdiagram-context-menu-item', { hasText: 'Paste' })).toBeDisabled();
+
+    // A press outside dismisses it, the way every menu behaves.
+    await canvas.click({ position: { x: 40, y: 40 } });
+    await expect(menu).toHaveCount(0);
 });
 
 test('demo toolbar and component requests share the fullscreen overlay', async ({ page }) => {
