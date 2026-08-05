@@ -380,6 +380,27 @@ requireElement<HTMLButtonElement>('#exportBtn').addEventListener('click', () => 
         setStatus('Full strategy image exported.');
     }, 'image/png');
 });
+requireElement<HTMLButtonElement>('#exportSvgBtn').addEventListener('click', () => {
+    // The same call and the same options as the PNG button above, so the two exports can be compared
+    // side by side -- the only difference is that this one stays sharp at any size.
+    const svg = diagram.takeSvg({
+        scope: 'content',
+        padding: 40,
+        includeOverview: false,
+        includeSelection: false,
+    });
+    const blob = new Blob([svg], { type: 'image/svg+xml' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'stocksharp-strategy.svg';
+    anchor.hidden = true;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setStatus('Full strategy exported as vector.');
+});
 requireElement<HTMLButtonElement>('#runtimeErrorBtn').addEventListener('click', () => {
     diagram.setNodeError('orders', 'Order Builder failed: order volume is not configured.');
     setStatus('Runtime error highlighted on Buy on cross. Hover the node for details.');
