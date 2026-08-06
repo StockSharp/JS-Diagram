@@ -2081,6 +2081,9 @@ export class Diagram {
                         fromPort: l.from.portId,
                         to: t,
                         toPort: l.to.portId,
+                        // The clipboard is built from saveDocument(), so it carries the style;
+                        // rebuilding without it silently turned every pasted dashed link solid.
+                        style: l.style,
                         metadata: l.metadata,
                     });
             }

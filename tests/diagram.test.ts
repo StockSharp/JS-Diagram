@@ -2633,3 +2633,29 @@ test('a document with a duplicate zone id is rejected on the way in, not on the 
     );
     assert.match(parsed.message, /duplicate zone id/);
 });
+
+test('copy/paste keeps a link style, the way load/save already does', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, style: 'dashed' }],
+    }));
+    // Control: the style is in the model to begin with, and the clipboard is built from the same
+    // saveDocument() shape, so it is carried across -- only the rebuild can lose it.
+    assert.equal(diagram.saveDocument().links[0].style, 'dashed', 'the fixture link is not dashed');
+
+    diagram.selectNodesById(['a', 'b']);
+    diagram.copySelection();
+    diagram.pasteSelection();
+
+    const styles = diagram.saveDocument().links.map((link) => link.style);
+    assert.equal(styles.length, 2, 'paste should have produced a second link');
+    assert.deepEqual(
+        styles,
+        ['dashed', 'dashed'],
+        'the pasted link came back solid: pasteDocument rebuilds links without their style',
+    );
+});
