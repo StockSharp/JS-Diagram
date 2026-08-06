@@ -2862,3 +2862,30 @@ test('a port covered by another node body loses the hit test to that body', () =
         + 'the user cannot see',
     );
 });
+
+test('a double click on a link leaves the viewport untouched', () => {
+    const { diagram, host } = makeDiagram();
+    diagram.load([source, sink], [{ id: 'l1', from: 'source', fromPort: 'out', to: 'sink', toPort: 'in' }]);
+    // Move away from the fit so a stray zoomToFit() is visible in the view state.
+    diagram.setZoom(0.5);
+    const before = diagram.getViewState();
+
+    // Midway between the two sockets: clear of both bodies and of both port circles.
+    const from = diagram.findNode('source')!.outPorts[0];
+    const to = diagram.findNode('sink')!.inPorts[0];
+    const [vx, vy] = diagram.worldToView((from.cx + to.cx) / 2, (from.cy + to.cy) / 2);
+
+    let overLink = false;
+    diagram.on('linkHover', (payload) => { overLink = payload.hovering; });
+    host.canvas!.dispatch('pointermove', { clientX: vx, clientY: vy });
+    assert.ok(overLink, 'setup error, not the finding: the chosen point is not on the link');
+
+    host.canvas!.dispatch('dblclick', { clientX: vx, clientY: vy });
+
+    assert.deepEqual(
+        diagram.getViewState(),
+        before,
+        'a double click on a link must not re-fit the view: dblclick treated the link as empty '
+        + 'space and ran zoomToFit(), rewriting the zoom and pan the user had set',
+    );
+});

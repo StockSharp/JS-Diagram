@@ -2539,6 +2539,9 @@ export class Diagram {
             const [sx, sy] = localXY(e);
             const [wx, wy] = this.toWorld(sx, sy);
             if (this.portAt(wx, wy) !== null) return;
+            // A wire is something, not empty canvas: without this the zoomToFit fallback below
+            // threw away the zoom and pan the user had set, on a double click aimed at a link.
+            if (this.linkAt(wx, wy) !== null) return;
             const node = this.nodeAt(wx, wy);
             if (node !== null) {
                 if (this.permissions.inspect && node.openAction.length > 0) {
