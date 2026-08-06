@@ -8,7 +8,7 @@ import { SvgSurface } from './svg-surface.js';
 
 import { createDiagramDocument, parseDiagramDocument } from './core/document.js';
 import { DiagramCommandHistory } from './core/history.js';
-import { setJsonKey } from './core/json.js';
+import { getJsonKey, setJsonKey } from './core/json.js';
 import { toPortDynamicMode } from './core/model.js';
 import type {
     DiagramDocumentZone,
@@ -1234,7 +1234,7 @@ export class Diagram {
             if (node.loadError.length === 0) continue;
             const state = createDiagramNodeRuntimeState();
             state.errors.load = { kind: 'load', message: node.loadError, pulse: ++this.runtimePulse };
-            this.runtimeState.nodes[node.id] = state;
+            setJsonKey(this.runtimeState.nodes as unknown as JsonObject, node.id, state as unknown as JsonValue);
         }
         if (Object.keys(this.runtimeState.nodes).length > 0) this.emitRuntimeStateChanged();
         this.history.clear();
@@ -1566,8 +1566,8 @@ export class Diagram {
                 .flatMap((node) => [node.errors.runtime?.pulse ?? 0, node.errors.load?.pulse ?? 0]),
         );
         for (const node of this.nodes) {
-            const errors = this.runtimeState.nodes[node.id]?.errors;
-            const previousRuntime = previous.nodes[node.id]?.errors.runtime;
+            const errors = getJsonKey(this.runtimeState.nodes, node.id)?.errors;
+            const previousRuntime = getJsonKey(previous.nodes, node.id)?.errors.runtime;
             const runtimeError = errors?.runtime;
             node.runtimeError = runtimeError?.message ?? '';
             node.loadError = errors?.load?.message ?? '';
@@ -1603,8 +1603,10 @@ export class Diagram {
             : node?.outPorts.find((candidate) => candidate.id === portId);
         if (node === undefined || port === undefined) return false;
         const state = this.getRuntimeState();
-        const nodeState = state.nodes[nodeId] ?? createDiagramNodeRuntimeState();
-        state.nodes[nodeId] = nodeState;
+        // Node ids come from documents, so "__proto__" is reachable: a bare assignment there
+        // writes the prototype instead of creating an entry, and the next read of it throws.
+        const nodeState = getJsonKey(state.nodes, nodeId) ?? createDiagramNodeRuntimeState();
+        setJsonKey(state.nodes as unknown as JsonObject, nodeId, nodeState as unknown as JsonValue);
         const current = nodeState.ports[direction][portId] ?? createDiagramPortRuntimeState();
         nodeState.ports[direction][portId] = { ...current, ...patch };
         this.setRuntimeState(state);
@@ -1630,8 +1632,8 @@ export class Diagram {
                 : null;
         }
         const state = this.getRuntimeState();
-        const nodeState = state.nodes[id] ?? createDiagramNodeRuntimeState();
-        state.nodes[id] = nodeState;
+        const nodeState = getJsonKey(state.nodes, id) ?? createDiagramNodeRuntimeState();
+        setJsonKey(state.nodes as unknown as JsonObject, id, nodeState as unknown as JsonValue);
         // Only this kind's slot is written, so an error of the other kind that is
         // already on the node survives.
         if (message.length === 0) delete nodeState.errors[kind];
@@ -1650,7 +1652,7 @@ export class Diagram {
         }
         if (kind === undefined || kind === 'load') node.loadError = '';
         const state = this.getRuntimeState();
-        const nodeState = state.nodes[id];
+        const nodeState = getJsonKey(state.nodes, id);
         if (nodeState !== undefined) {
             if (kind === undefined || kind === 'runtime') delete nodeState.errors.runtime;
             if (kind === undefined || kind === 'load') delete nodeState.errors.load;
@@ -2922,7 +2924,7 @@ export class Diagram {
         const ctx = this.ctx;
         const hasLoadError = options.runtime && n.loadError.length > 0;
         const hasRuntimeError = options.runtime && n.runtimeError.length > 0;
-        const runtime = options.runtime ? this.runtimeState.nodes[n.id] : undefined;
+        const runtime = options.runtime ? getJsonKey(this.runtimeState.nodes, n.id) : undefined;
         const active = options.runtime
             && (this.runtimeState.activeNodeId === n.id || runtime?.active === true);
         roundRect(ctx, n.x, n.y, n.w, n.h, 6);
@@ -3014,7 +3016,7 @@ export class Diagram {
         }
     }
     private portRuntimeState(node: NodeModel, port: PortModel): DiagramPortRuntimeState | null {
-        return this.runtimeState.nodes[node.id]?.ports[port.direction][port.id] ?? null;
+        return getJsonKey(this.runtimeState.nodes, node.id)?.ports[port.direction][port.id] ?? null;
     }
     // Symmetric jump-over: any segment of THIS link hops the perpendicular
     // segments of links drawn before it (H over earlier V, V over earlier

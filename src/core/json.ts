@@ -14,3 +14,14 @@ export function setJsonKey<T>(target: Record<string, T>, key: string, value: T):
     }
     target[key] = value;
 }
+
+/**
+ * The read that matches setJsonKey.
+ *
+ * `target[key]` for `__proto__` answers with the inherited prototype rather than the entry, so a
+ * plain lookup reports a value for a key that was never stored -- and callers that fall back on
+ * `?? create()` never do, then use `Object.prototype` as if it were their own record.
+ */
+export function getJsonKey<T>(target: Record<string, T>, key: string): T | undefined {
+    return Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined;
+}

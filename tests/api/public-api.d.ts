@@ -481,6 +481,14 @@ export declare class DiagramCommandHistory {
  * anything the parser accepted could no longer be serialized or cloned.
  */
 export declare function setJsonKey<T>(target: Record<string, T>, key: string, value: T): void;
+/**
+ * The read that matches setJsonKey.
+ *
+ * `target[key]` for `__proto__` answers with the inherited prototype rather than the entry, so a
+ * plain lookup reports a value for a key that was never stored -- and callers that fall back on
+ * `?? create()` never do, then use `Object.prototype` as if it were their own record.
+ */
+export declare function getJsonKey<T>(target: Record<string, T>, key: string): T | undefined;
 
 // FILE: core/model.d.ts
 export type JsonPrimitive = string | number | boolean | null;

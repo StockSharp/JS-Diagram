@@ -3180,3 +3180,110 @@ test('link event payloads carry a metadata copy, so a host write cannot reach th
         + ' and history',
     );
 });
+
+test('a node whose id is "__proto__" keeps its runtime state like any other node', async (t) => {
+    await t.test('load() records the load error of a node with id "__proto__"', () => {
+        const { diagram } = makeDiagram();
+        diagram.load([
+            { id: '__proto__', name: 'Proto', x: 10, y: 20, loadError: 'broken' },
+            { id: 'plain', name: 'Plain', x: 200, y: 20, loadError: 'broken' },
+        ], []);
+        assert.equal(
+            diagram.save().nodes.some((node) => node.id === '__proto__'),
+            true,
+            'the node with id "__proto__" was rejected at load time, so its runtime state cannot be tested',
+        );
+
+        const nodes = diagram.getRuntimeState().nodes;
+        assert.equal(
+            nodes.plain?.errors.load?.message,
+            'broken',
+            'the ordinary node did not get its load error either, so this test could prove nothing about "__proto__"',
+        );
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(nodes, '__proto__'),
+            true,
+            'the runtime state has no own "__proto__" entry after load(): the write went through the inherited'
+            + ` __proto__ setter instead of creating a key (own keys: ${JSON.stringify(Object.keys(nodes))}),`
+            + ' so the node silently shows no load error while every other node does',
+        );
+        assert.equal(
+            nodes['__proto__']?.errors.load?.message,
+            'broken',
+            'the load error of the node with id "__proto__" is not readable back from the runtime state',
+        );
+    });
+
+    await t.test('setNodeError() records a runtime error on a node with id "__proto__"', () => {
+        const { diagram } = makeDiagram();
+        diagram.load([
+            { id: '__proto__', name: 'Proto', x: 10, y: 20 },
+            { id: 'plain', name: 'Plain', x: 200, y: 20 },
+        ], []);
+        assert.equal(
+            diagram.save().nodes.some((node) => node.id === '__proto__'),
+            true,
+            'the node with id "__proto__" was rejected at load time, so its runtime state cannot be tested',
+        );
+
+        let failure: unknown = null;
+        let accepted: boolean | null = null;
+        try {
+            accepted = diagram.setNodeError('__proto__', 'boom');
+        } catch (error) {
+            failure = error;
+        }
+        assert.equal(
+            failure,
+            null,
+            'setNodeError() threw on a node with id "__proto__" instead of recording the error:'
+            + ` ${failure instanceof Error ? failure.message : String(failure)}`,
+        );
+        assert.equal(accepted, true, 'setNodeError() refused a node that exists, id "__proto__"');
+
+        const nodes = diagram.getRuntimeState().nodes;
+        assert.equal(
+            Object.prototype.hasOwnProperty.call(nodes, '__proto__'),
+            true,
+            'the runtime state has no own "__proto__" entry after setNodeError()'
+            + ` (own keys: ${JSON.stringify(Object.keys(nodes))})`,
+        );
+        assert.equal(
+            nodes['__proto__']?.errors.runtime?.message,
+            'boom',
+            'the runtime error of the node with id "__proto__" is not readable back from the runtime state',
+        );
+        assert.equal(
+            Object.getPrototypeOf(nodes),
+            Object.prototype,
+            'writing runtime state for the node with id "__proto__" replaced the prototype of the state map',
+        );
+    });
+
+    await t.test('setPortRuntimeState() records port state on a node with id "__proto__"', () => {
+        const { diagram } = makeDiagram();
+        diagram.load([
+            { id: '__proto__', name: 'Proto', x: 10, y: 20, outPorts: [{ id: 'out', name: 'Value', type: 'number' }] },
+        ], []);
+
+        let failure: unknown = null;
+        let accepted: boolean | null = null;
+        try {
+            accepted = diagram.setPortRuntimeState('__proto__', 'out', 'out', { value: '42' });
+        } catch (error) {
+            failure = error;
+        }
+        assert.equal(
+            failure,
+            null,
+            'setPortRuntimeState() threw on a node with id "__proto__" instead of recording the state:'
+            + ` ${failure instanceof Error ? failure.message : String(failure)}`,
+        );
+        assert.equal(accepted, true, 'setPortRuntimeState() refused a port that exists on node "__proto__"');
+        assert.equal(
+            diagram.getRuntimeState().nodes['__proto__']?.ports.out.out?.value,
+            '42',
+            'the port value of the node with id "__proto__" is not readable back from the runtime state',
+        );
+    });
+});
