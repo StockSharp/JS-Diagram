@@ -63,6 +63,68 @@ test('the built-in context menu exports through its submenu', async ({ page }) =
     await expect(menu).toHaveCount(0);
 });
 
+test('menu labels follow a translation bundle installed after the bundle loaded', async ({ page }) => {
+    await page.goto('/demo/index.html');
+    const canvas = page.locator('#diagram canvas');
+    await expect(canvas).toHaveCount(1);
+
+    // Deliberately after the page and its script have loaded, which is the order a host can
+    // actually manage and the one that used to lose. Not page.addInitScript, which would run
+    // first and hide the very thing this guards.
+    await page.evaluate(() => {
+        (window as unknown as { __designerI18n: Record<string, string> }).__designerI18n = {
+            copy: 'Копировать',
+            ctxDelete: 'Удалить',
+            ctxExportAs: 'Экспортировать как',
+            ctxExportSvg: 'Изображение SVG',
+            ctxOpen: '',
+        };
+    });
+
+    await canvas.click({ button: 'right', position: { x: 120, y: 120 } });
+    const menu = page.locator('.ssdiagram-context-menu');
+    await expect(menu).toBeVisible();
+
+    const labels = menu.locator('.ssdiagram-context-menu-label');
+    await expect(labels.filter({ hasText: 'Копировать' })).toHaveCount(1);
+    await expect(labels.filter({ hasText: 'Удалить' })).toHaveCount(1);
+    await expect(labels.filter({ hasText: 'Экспортировать как' })).toHaveCount(1);
+    await expect(labels.filter({ hasText: 'Изображение SVG' })).toHaveCount(1);
+    // Blank translations fall back rather than rendering an empty row.
+    await expect(labels.filter({ hasText: /^Open$/ })).toHaveCount(1);
+    await expect(labels.filter({ hasText: /^Paste$/ })).toHaveCount(1);
+});
+
+test('the language switch translates the demo and the control menu together', async ({ page }) => {
+    await page.goto('/demo/index.html');
+    const canvas = page.locator('#diagram canvas');
+    await expect(canvas).toHaveCount(1);
+    await expect(page.locator('#addBtn')).toHaveText('+ Node');
+
+    await page.locator('#langBtn').click();
+
+    // The host's own chrome, its palette vocabulary, and the status line.
+    await expect(page.locator('html')).toHaveAttribute('lang', 'zh');
+    await expect(page.locator('#addBtn')).toHaveText('+ 元素');
+    await expect(page.locator('#readonlyBtn')).toHaveText('只读');
+    await expect(page.locator('.d-palette-item').first()).toContainText('行情数据');
+    await expect(page.locator('#modelStats')).toContainText('个元素');
+
+    // And the part that comes from the package itself.
+    await canvas.click({ button: 'right', position: { x: 120, y: 120 } });
+    const labels = page.locator('.ssdiagram-context-menu-label');
+    await expect(labels.filter({ hasText: '复制' })).toHaveCount(1);
+    await expect(labels.filter({ hasText: '导出为' })).toHaveCount(1);
+    await expect(labels.filter({ hasText: 'SVG 图片' })).toHaveCount(1);
+
+    // Back to English without a reload, which is what a per-call bundle read buys.
+    await page.keyboard.press('Escape');
+    await page.locator('#langBtn').click();
+    await expect(page.locator('#addBtn')).toHaveText('+ Node');
+    await canvas.click({ button: 'right', position: { x: 120, y: 120 } });
+    await expect(page.locator('.ssdiagram-context-menu-label').filter({ hasText: /^Copy$/ })).toHaveCount(1);
+});
+
 test('right-click leaves a menu behind instead of only suppressing the browser one', async ({ page }) => {
     await page.goto('/demo/index.html');
     const canvas = page.locator('#diagram canvas');

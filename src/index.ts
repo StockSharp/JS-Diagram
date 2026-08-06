@@ -85,6 +85,11 @@ export {
     StockSharpDiagram,
 } from './diagram/stocksharp-diagram.js';
 
+// The menu resolves its labels through this, so a host needs the type to write a bundle the
+// compiler can check. Without it the key names get hand-copied, and a typo shows up only as an
+// English label on screen.
+export type { DesignerI18n } from './i18n.js';
+
 export type {
     ContextCommand,
     ContextCommandGroup,

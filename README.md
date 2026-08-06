@@ -154,7 +154,9 @@ missing type. Sites can localize that message through
 `data-diagram-missing-element="Missing: {typeId}"` on the host.
 
 Every text the embedded control shows comes from the host, so a translated page
-carries no English leftovers:
+carries no English leftovers. These attributes are per-instance overrides on top
+of the page's translation bundle (see *Translating the control* below); set them
+when one diagram has to read differently from the rest of the page:
 
 | Host attribute | What it renames |
 |---|---|
@@ -163,7 +165,9 @@ carries no English leftovers:
 | `data-diagram-missing-element="Missing: {typeId}"` | the placeholder for an element the palette lacks |
 
 The same labels are available to custom integrations as the `fullscreenLabels`
-option and `setFullscreenLabels()` on `StockSharpDiagram`.
+option and `setFullscreenLabels()` on `StockSharpDiagram`. With neither the
+attribute nor the option, the wording comes from the bundle, so a page that has
+already been translated needs no per-diagram markup at all.
 
 ### Node actions and errors
 
@@ -190,10 +194,20 @@ the menu was opened over a socket.
 
 ### The context menu
 
-The control has no menu widget: right-click suppresses the browser's own menu
-and emits `contextMenuRequested` with page coordinates, whatever was hit, and
-the menu contents already resolved. Draw it however the host draws menus, then
-send the choice back through `executeContextCommand()`.
+Right-click opens the control's own menu, with an Export submenu. It is on by
+default, because right-click suppresses the browser's menu either way and a
+control that takes one away owes one back. It needs no stylesheet: it is styled
+inline over `--ssdiagram-*` custom properties (`--ssdiagram-menu-background`,
+`--ssdiagram-menu-border`, `--ssdiagram-menu-color`, `--ssdiagram-menu-hover`,
+`--ssdiagram-menu-disabled-color`, `--ssdiagram-menu-font`), falling back to the
+`--ssdiagram-control-*` values the fullscreen button uses. Its class names —
+`ssdiagram-context-menu`, `-item`, `-label`, `-arrow`, `-submenu`, `-separator` —
+are stable if you would rather use CSS.
+
+To draw your own instead, pass `showContextMenu: false` (or call
+`setContextMenuEnabled(false)`) and handle `contextMenuRequested`, which is
+emitted either way — and emitted *before* the built-in menu opens, so a handler
+can still switch it off.
 
 `commands` is a tree in display order. An entry with a `group` is a submenu;
 anything else is a command. `enabled` is computed for both — a submenu is off
@@ -209,8 +223,10 @@ diagram.on('contextMenuRequested', ({ x, y, commands }) => {
 menu.on('pick', (command) => diagram.executeContextCommand(command));
 ```
 
-`undo`, `redo`, `cut`, `copy`, `paste` and `delete` are carried out by the
-control itself. The rest are requests it cannot answer alone: `open`,
+`undo`, `redo`, `cut`, `copy`, `paste`, `delete` and `overview` are carried out
+by the control itself. `overview` toggles the corner minimap, and reports its
+current state as `checked` on the command so a menu can tick it rather than offer
+a dead show/hide pair. The rest are requests it cannot answer alone: `open`,
 `properties` and `help` raise `nodeOpen` / `nodeProperties` / `nodeHelp`, and
 the `export` submenu raises `exportRequested` with the chosen format. Nothing
 is produced until the host acts on it — only the host knows where the result
@@ -226,9 +242,54 @@ diagram.on('exportRequested', ({ format }) => {
 ```
 
 Export is offered whenever the diagram has a node, including in read-only mode,
-because it only reads. Menu labels come from the host's i18n bundle
-(`ctxExportAs`, `ctxExportDocument`, `ctxExportPng`, `ctxExportSvg`, and the
-keys named after the other commands).
+because it only reads.
+
+#### Translating the control
+
+There is one mechanism, and it is `window.__designerI18n`: an object typed by the
+exported `DesignerI18n`, holding every string the package renders itself — the
+menu, the fullscreen button's tooltip, and the embed failure notes. It is read on
+every lookup, so it can be assigned at any point, before or after the bundle
+loads, and reassigned later to change language. A key that is missing or empty
+falls back to English.
+
+Per-instance settings — the `fullscreenLabels` option, `setFullscreenLabels()`,
+and the `data-diagram-*` attributes above — override the bundle for one diagram.
+Resolution is: explicit setting, then bundle, then the built-in English.
+
+The context menu is rebuilt on every open and needs nothing after a language
+change. The fullscreen button is drawn once, so call `refreshLabels()` to
+re-read the bundle for it.
+
+```ts
+import type { DesignerI18n } from '@stocksharp/diagram';
+
+const labels: DesignerI18n = { cut: 'Вырезать', ctxDelete: 'Удалить', /* … */ };
+(window as unknown as { __designerI18n: DesignerI18n }).__designerI18n = labels;
+```
+
+The key is not always the command name, so here is the whole menu:
+
+| command | key | English |
+|---|---|---|
+| `undo` / `redo` | `undo` / `redo` | Undo / Redo |
+| `cut` / `copy` / `paste` | `cut` / `copy` / `paste` | Cut / Copy / Paste |
+| `open` | `ctxOpen` | Open |
+| `delete` | `ctxDelete` | Delete |
+| *(the submenu)* | `ctxExportAs` | Export as |
+| `exportDocument` | `ctxExportDocument` | Scheme |
+| `exportPng` / `exportSvg` | `ctxExportPng` / `ctxExportSvg` | PNG image / SVG image |
+| `overview` | `ctxOverview` | Overview |
+| `properties` | `properties` | Properties |
+| `help` | `ctxHelp` | Help |
+| *(fullscreen button)* | `fullscreenEnter` / `fullscreenExit` | Enter / Exit fullscreen |
+| *(embed failures)* | `embedErrorLoad` / `embedErrorEmpty` / `embedErrorDraw` | the three notes shown in place of a diagram |
+| *(embed placeholder)* | `embedMissingElement` | the missing-element tooltip |
+
+`ctxDelete` is separate from the solution explorer's `delete` on purpose: that
+one removes a whole strategy, this one the selected nodes and links, and a
+language that declines the object cannot serve both from one key. The same goes
+for `ctxExportAs` against `ctxExport`.
 
 Runtime failures flash the node border before leaving it red. Errors found
 while loading a scheme use a red background. Hovering either state shows the

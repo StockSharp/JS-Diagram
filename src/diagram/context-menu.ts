@@ -20,9 +20,10 @@ const SUBMENU_CLASS = 'ssdiagram-context-menu-submenu';
 const SEPARATOR_CLASS = 'ssdiagram-context-menu-separator';
 const LABEL_CLASS = 'ssdiagram-context-menu-label';
 const ARROW_CLASS = 'ssdiagram-context-menu-arrow';
+const CHECK_CLASS = 'ssdiagram-context-menu-check';
 
 /** A rule below these entries, so related commands read as blocks rather than one long list. */
-const SEPARATE_AFTER: ReadonlySet<string> = new Set(['redo', 'paste', 'delete']);
+const SEPARATE_AFTER: ReadonlySet<string> = new Set(['redo', 'paste', 'delete', 'overview']);
 
 function label(id: ContextCommand | ContextCommandGroup): string {
     switch (id) {
@@ -32,11 +33,12 @@ function label(id: ContextCommand | ContextCommandGroup): string {
         case 'copy': return t('copy', 'Copy');
         case 'paste': return t('paste', 'Paste');
         case 'open': return t('ctxOpen', 'Open');
-        case 'delete': return t('delete', 'Delete');
+        case 'delete': return t('ctxDelete', 'Delete');
         case 'export': return t('ctxExportAs', 'Export as');
         case 'exportDocument': return t('ctxExportDocument', 'Scheme');
         case 'exportPng': return t('ctxExportPng', 'PNG image');
         case 'exportSvg': return t('ctxExportSvg', 'SVG image');
+        case 'overview': return t('ctxOverview', 'Overview');
         case 'properties': return t('properties', 'Properties');
         case 'help': return t('ctxHelp', 'Help');
     }
@@ -46,6 +48,10 @@ const PANEL_STYLE: Partial<CSSStyleDeclaration> = {
     position: 'fixed',
     zIndex: '2147483000',
     minWidth: '176px',
+    // Translations run longer than English -- German and Russian routinely half again. Without
+    // a cap the panel just grows, and on a narrow viewport it leaves the screen entirely, which
+    // no amount of repositioning can recover.
+    maxWidth: 'min(320px, calc(100vw - 16px))',
     padding: '4px',
     border: '1px solid var(--ssdiagram-menu-border, var(--ssdiagram-control-border, var(--t-border, #3a4250)))',
     borderRadius: '7px',
@@ -68,8 +74,10 @@ const ITEM_STYLE: Partial<CSSStyleDeclaration> = {
     background: 'transparent',
     color: 'inherit',
     font: 'inherit',
-    textAlign: 'left',
-    whiteSpace: 'nowrap',
+    // Logical, not physical: on an RTL page these follow the writing direction instead of
+    // pinning the text left and truncating from the wrong end.
+    textAlign: 'start',
+    overflowWrap: 'anywhere',
     cursor: 'pointer',
     boxSizing: 'border-box',
 };
@@ -89,6 +97,7 @@ export class ContextMenuView {
     private readonly execute: (command: ContextCommand) => void;
     private root: HTMLElement | null = null;
     private submenu: HTMLElement | null = null;
+    private readonly submenuTriggers = new Map<HTMLElement, HTMLElement>();
     private readonly detach: Array<() => void> = [];
 
     constructor(options: ContextMenuViewOptions) {
@@ -107,9 +116,10 @@ export class ContextMenuView {
         root.className = ROOT_CLASS;
         root.setAttribute('role', 'menu');
 
+        const gutter = items.some((item) => !('group' in item) && item.checked !== undefined);
         items.forEach((item, index) => {
-            if ('group' in item) root.appendChild(this.groupEntry(owner, item));
-            else root.appendChild(this.commandEntry(owner, item.command, item.enabled, true));
+            if ('group' in item) root.appendChild(this.groupEntry(owner, item, gutter));
+            else root.appendChild(this.commandEntry(owner, item.command, item.enabled, true, item.checked, gutter));
             const id = 'group' in item ? item.group : item.command;
             if (SEPARATE_AFTER.has(id) && index < items.length - 1) root.appendChild(this.separator(owner));
         });
@@ -123,6 +133,7 @@ export class ContextMenuView {
     hide(): void {
         for (const dispose of this.detach.splice(0)) dispose();
         this.submenu = null;
+        this.submenuTriggers.clear();
         this.root?.remove();
         this.root = null;
     }
@@ -148,16 +159,35 @@ export class ContextMenuView {
         return rule;
     }
 
-    private item(owner: Document, text: string, enabled: boolean, arrow: boolean): HTMLButtonElement {
+    private item(
+        owner: Document,
+        text: string,
+        enabled: boolean,
+        arrow: boolean,
+        checked: boolean | undefined,
+        gutter: boolean,
+    ): HTMLButtonElement {
         const button = owner.createElement('button');
         button.type = 'button';
         button.className = ITEM_CLASS;
-        button.setAttribute('role', 'menuitem');
+        button.setAttribute('role', checked === undefined ? 'menuitem' : 'menuitemcheckbox');
+        if (checked !== undefined) button.setAttribute('aria-checked', String(checked));
         Object.assign(button.style, ITEM_STYLE);
         if (!enabled) {
             button.disabled = true;
             button.style.color = DISABLED_COLOR;
             button.style.cursor = 'default';
+        }
+
+        // Every item in a panel that has a checkable entry gets the same gutter, so the
+        // captions stay on one line rather than one row sitting further in than the rest.
+        if (gutter) {
+            const tick = owner.createElement('span');
+            tick.className = CHECK_CLASS;
+            tick.textContent = checked === true ? '✓' : '';
+            tick.setAttribute('aria-hidden', 'true');
+            Object.assign(tick.style, { flex: 'none', width: '12px', textAlign: 'center' });
+            button.appendChild(tick);
         }
 
         const caption = owner.createElement('span');
@@ -169,7 +199,8 @@ export class ContextMenuView {
         if (arrow) {
             const chevron = owner.createElement('span');
             chevron.className = ARROW_CLASS;
-            chevron.textContent = '›';
+            // Points the way the submenu actually opens, which on an RTL page is the other way.
+            chevron.textContent = this.rtl() ? '‹' : '›';
             chevron.setAttribute('aria-hidden', 'true');
             Object.assign(chevron.style, { flex: 'none', opacity: '0.7', fontSize: '14px' });
             button.appendChild(chevron);
@@ -182,8 +213,15 @@ export class ContextMenuView {
     // the submenu must not: reaching it means the pointer has entered that very panel, and
     // closing it there would pull it out from under the pointer and drop the click on the
     // canvas behind.
-    private commandEntry(owner: Document, command: ContextCommand, enabled: boolean, closesSubmenu: boolean): HTMLElement {
-        const button = this.item(owner, label(command), enabled, false);
+    private commandEntry(
+        owner: Document,
+        command: ContextCommand,
+        enabled: boolean,
+        closesSubmenu: boolean,
+        checked: boolean | undefined,
+        gutter: boolean,
+    ): HTMLElement {
+        const button = this.item(owner, label(command), enabled, false, checked, gutter);
         this.on(button, 'pointerenter', () => {
             if (closesSubmenu) this.closeSubmenu();
             if (enabled) button.style.background = HOVER_BACKGROUND;
@@ -198,23 +236,36 @@ export class ContextMenuView {
         return button;
     }
 
-    private groupEntry(owner: Document, group: { group: ContextCommandGroup; enabled: boolean; commands: readonly { command: ContextCommand; enabled: boolean }[] }): HTMLElement {
+    private groupEntry(
+        owner: Document,
+        group: { group: ContextCommandGroup; enabled: boolean; commands: readonly { command: ContextCommand; enabled: boolean; checked?: boolean }[] },
+        gutter: boolean,
+    ): HTMLElement {
         const host = owner.createElement('div');
         host.style.position = 'relative';
 
-        const button = this.item(owner, label(group.group), group.enabled, true);
+        const button = this.item(owner, label(group.group), group.enabled, true, undefined, gutter);
+        button.setAttribute('aria-haspopup', 'menu');
+        button.setAttribute('aria-expanded', 'false');
         host.appendChild(button);
 
         const panel = this.panel(owner);
         panel.className = SUBMENU_CLASS;
         panel.setAttribute('role', 'menu');
-        Object.assign(panel.style, { position: 'absolute', left: '100%', top: '-5px', display: 'none' });
-        for (const child of group.commands) panel.appendChild(this.commandEntry(owner, child.command, child.enabled, false));
+        panel.setAttribute('aria-label', label(group.group));
+        // insetInlineStart, not left: the submenu opens towards the end of the line, which
+        // is the right on an LTR page and the left on an RTL one.
+        Object.assign(panel.style, { position: 'absolute', insetInlineStart: '100%', top: '-5px', display: 'none' });
+        const childGutter = group.commands.some((child) => child.checked !== undefined);
+        for (const child of group.commands) {
+            panel.appendChild(this.commandEntry(owner, child.command, child.enabled, false, child.checked, childGutter));
+        }
         host.appendChild(panel);
 
         const open = (): void => {
             if (!group.enabled) return;
             button.style.background = HOVER_BACKGROUND;
+            button.setAttribute('aria-expanded', 'true');
             panel.style.display = 'block';
             this.submenu = panel;
             this.keepOnScreen(panel);
@@ -225,25 +276,39 @@ export class ContextMenuView {
         this.on(host, 'pointerleave', () => {
             if (this.submenu !== panel) return;
             button.style.background = 'transparent';
+            button.setAttribute('aria-expanded', 'false');
             panel.style.display = 'none';
             this.submenu = null;
         });
+        this.submenuTriggers.set(panel, button);
         return host;
     }
 
     private closeSubmenu(): void {
         if (this.submenu === null) return;
         this.submenu.style.display = 'none';
+        this.submenuTriggers.get(this.submenu)?.setAttribute('aria-expanded', 'false');
         this.submenu = null;
+    }
+
+    // Reads the resolved writing direction so the submenu's side and its arrow agree with it.
+    private rtl(): boolean {
+        if (typeof getComputedStyle !== 'function') return false;
+        try {
+            return getComputedStyle(this.container).direction === 'rtl';
+        } catch {
+            // A detached or fake container has no computed style; left-to-right is the safe read.
+            return false;
+        }
     }
 
     /** Keeps the panel inside the viewport, flipping it left when it would run off the edge. */
     private keepOnScreen(panel: HTMLElement): void {
         if (typeof panel.getBoundingClientRect !== 'function' || typeof window === 'undefined') return;
         const box = panel.getBoundingClientRect();
-        if (box.right > window.innerWidth - 4) {
-            panel.style.left = 'auto';
-            panel.style.right = '100%';
+        if (box.right > window.innerWidth - 4 || box.left < 4) {
+            panel.style.insetInlineStart = 'auto';
+            panel.style.insetInlineEnd = '100%';
         }
         if (box.bottom > window.innerHeight - 4) {
             panel.style.top = 'auto';

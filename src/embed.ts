@@ -1,3 +1,4 @@
+import { t } from './i18n.js';
 // Shared read-only diagram embed layer. Rendering, palette loading and theming
 // live next to the diagram engine so web applications do not copy that logic.
 //
@@ -407,7 +408,7 @@ async function renderSchemeAtRevision(
 		diagram.setLinkValidator(() => true);
 		diagram.setOverviewVisible(false);
 		const missingTypeTemplate = div.dataset.diagramMissingElement
-			?? 'Element type "{typeId}" is missing from the palette.';
+			?? t('embedMissingElement', 'Element type "{typeId}" is missing from the palette.');
 		const converted = toDiagramNodes(
 			scheme,
 			catalog,
@@ -508,10 +509,12 @@ interface EmbedErrorTexts {
 // default would never fire and the note would render blank.
 function errorTexts(div: HTMLElement): EmbedErrorTexts {
 	const parts = (div.dataset.diagramErrors ?? '').split('|');
+	// The attribute stays the override; without it the wording comes from the shared bundle, so
+	// a page that already translated the menu does not have to repeat itself per embed.
 	return {
-		load: parts[0] || 'Diagram source could not be loaded.',
-		empty: parts[1] || 'Diagram is empty or malformed.',
-		draw: parts[2] || 'Diagram could not be rendered.',
+		load: parts[0] || t('embedErrorLoad', 'Diagram source could not be loaded.'),
+		empty: parts[1] || t('embedErrorEmpty', 'Diagram is empty or malformed.'),
+		draw: parts[2] || t('embedErrorDraw', 'Diagram could not be rendered.'),
 	};
 }
 

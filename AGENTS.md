@@ -22,6 +22,14 @@ never commit them.
 regenerate the snapshot with `npm run api:update` and commit it in the same
 change — otherwise CI fails.
 
+**Comment private members with `//`, not `/** */`.** The declaration emitter drops
+a private member's body but keeps its doc comment, which then attaches to whatever
+member comes next — or dangles at the end of the class. Either way the snapshot
+changes and `api:check` fails on a change that never touched the public API. When
+`api:check` reddens and the diff is a stray comment block, this is why: convert
+that comment to `//` rather than regenerating the snapshot, which would bake the
+leak in.
+
 ## Commits
 Use Conventional Commits: `feat:`, `fix:`, `ci:`, `chore:`, `docs:`,
 `refactor:`, `test:`, `perf:`. Use `feat!:` or a `BREAKING CHANGE:` footer for

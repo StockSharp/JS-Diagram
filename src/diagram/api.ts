@@ -123,6 +123,7 @@ export type ContextCommand =
     | 'cut' | 'copy' | 'paste'
     | 'open' | 'delete'
     | 'exportDocument' | 'exportPng' | 'exportSvg'
+    | 'overview'
     | 'properties' | 'help';
 
 /**
@@ -140,6 +141,12 @@ export interface ContextCommandPayload {
 export interface ContextCommandState {
     command: ContextCommand;
     enabled: boolean;
+    /**
+     * Present only on commands that toggle something, and then it is the current state --
+     * `overview` is the one today. A menu draws these with a tick rather than as two separate
+     * show/hide entries, which would leave one of them dead at all times.
+     */
+    checked?: boolean;
 }
 
 /** A submenu: its own enabled state, plus the items to show when it opens. */

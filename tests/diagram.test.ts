@@ -966,6 +966,29 @@ test('read-only mode keeps inspection, selection and copy without allowing edits
     assert.equal(diagram.save().nodes.length, 2);
 });
 
+test('opening the context menu drops the hover under it, tooltip and all', () => {
+    const { diagram, host } = makeDiagram();
+    diagram.load([source, sink], []);
+
+    const hovers: boolean[] = [];
+    diagram.on('nodeHover', ({ hovering }) => hovers.push(hovering));
+
+    // Settle on a node: this is what arms the delayed tooltip.
+    const node = diagram.findNode('source');
+    assert.ok(node !== undefined);
+    // Through worldToView: loading centres the diagram, so the node's world coordinates do not
+    // land anywhere near it on screen.
+    const [nodeX, nodeY] = diagram.worldToView(node.x + node.w / 2, node.y + node.h / 2);
+    host.canvas?.dispatch('pointermove', { clientX: nodeX, clientY: nodeY });
+    assert.deepEqual(hovers, [true], 'the pointer should be hovering the node');
+
+    // The menu appears under a cursor that has not moved, and a stationary cursor gets no
+    // boundary event, so nothing else will tell the canvas its hover ended. Left alone, the
+    // pending tooltip fires 400ms later and draws through the open menu.
+    host.canvas?.dispatch('contextmenu', { clientX: nodeX, clientY: nodeY });
+    assert.deepEqual(hovers, [true, false], 'the hover survived the menu opening');
+});
+
 test('destroy removes the owned canvas', () => {
     const { diagram, host, fakeWindow } = makeDiagram();
     assert.ok((host.canvas?.listenerCount() ?? 0) > 0);
@@ -1915,7 +1938,7 @@ test('every context command in the public union is actually offered by the menu'
 
     assert.deepEqual(offered.slice().sort(), [
         'copy', 'cut', 'delete', 'exportDocument', 'exportPng', 'exportSvg',
-        'help', 'open', 'paste', 'properties', 'redo', 'undo',
+        'help', 'open', 'overview', 'paste', 'properties', 'redo', 'undo',
     ]);
     assert.equal(new Set(offered).size, offered.length, 'a command listed twice would run from two menu entries');
 });
@@ -2028,7 +2051,7 @@ test('right-clicking opens the control own menu and picking an item runs the com
     assert.deepEqual(
         menuItems(menu).map((item) => item.text()),
         ['Undo', 'Redo', 'Cut', 'Copy', 'Paste', 'Open', 'Delete',
-            'Export as', 'Scheme', 'PNG image', 'SVG image', 'Properties', 'Help'],
+            'Export as', 'Scheme', 'PNG image', 'SVG image', 'Overview', 'Properties', 'Help'],
     );
 
     const executed: string[] = [];
@@ -2118,6 +2141,139 @@ test('moving back to a plain item shuts the export submenu', async () => {
     assert.equal(submenu.style.display, 'block');
     menuItem(menu, 'Copy').dispatch('pointerenter');
     assert.equal(submenu.style.display, 'none', 'an open submenu should not outlive the pointer leaving it');
+});
+
+test('the menu uses host translations supplied after the bundle was loaded', async () => {
+    installDom();
+    // The order that loses if the bundle is snapshotted at import: script tag first, host
+    // translations second. It is also the only order a host can manage for a lazily loaded
+    // chunk, so it has to be the one that works.
+    (globalThis.window as unknown as { __designerI18n?: Record<string, string> }).__designerI18n = {
+        copy: 'Копировать',
+        ctxDelete: 'Удалить',
+        ctxExportAs: 'Экспортировать как',
+        ctxExportSvg: 'Изображение SVG',
+        ctxOpen: '',
+    };
+
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source', x: 40, y: 40 })], []);
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+
+    const menu = host.menu();
+    assert.ok(menu !== null);
+    const labels = menuItems(menu).map((item) => item.text());
+
+    assert.ok(labels.includes('Копировать'), `copy was not translated: ${labels.join(' | ')}`);
+    assert.ok(labels.includes('Удалить'), 'delete has no key of its own in the diagram menu section');
+    assert.ok(labels.includes('Экспортировать как'), 'the submenu title was not translated');
+    assert.ok(labels.includes('Изображение SVG'), 'a submenu item was not translated');
+    // An incomplete export leaves keys present but blank. A blank menu entry is worse than
+    // an untranslated one, so an empty string counts as missing.
+    assert.ok(labels.includes('Open'), 'an empty translation blanked the item instead of falling back');
+    // Untouched keys keep the English fallback.
+    assert.ok(labels.includes('Paste'));
+});
+
+test('overview is a toggle, and the menu reports its state rather than offering two entries', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    const overview = (): { enabled: boolean; checked?: boolean } => {
+        const item = diagram.getContextCommands().find((entry) => !('group' in entry) && entry.command === 'overview');
+        assert.ok(item !== undefined && !('group' in item), 'overview is missing from the menu');
+        return item;
+    };
+
+    assert.equal(diagram.getViewState().overviewVisible, true);
+    assert.equal(overview().checked, true, 'the state has to travel with the command, or a menu cannot tick it');
+    assert.equal(overview().enabled, true);
+
+    assert.equal(diagram.executeContextCommand('overview'), true);
+    assert.equal(diagram.getViewState().overviewVisible, false);
+    assert.equal(overview().checked, false);
+
+    // Toggling back is the same command: two show/hide entries would leave one dead at all times.
+    assert.equal(diagram.executeContextCommand('overview'), true);
+    assert.equal(diagram.getViewState().overviewVisible, true);
+    assert.equal(overview().checked, true);
+
+    // Commands that do not toggle carry no state at all, so a menu can tell them apart.
+    const copy = diagram.getContextCommands().find((entry) => !('group' in entry) && entry.command === 'copy');
+    assert.ok(copy !== undefined && !('group' in copy));
+    assert.equal(copy.checked, undefined);
+});
+
+test('the built-in menu ticks the overview entry and keeps the captions aligned', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    let menu = host.menu();
+    assert.ok(menu !== null);
+    const tick = (item: FakeElement): string =>
+        item.children.find((child) => child.className === 'ssdiagram-context-menu-check')?.textContent ?? '(no gutter)';
+
+    assert.equal(tick(menuItem(menu, 'Overview')), '✓');
+    // Every row gets the gutter, otherwise the ticked one would sit further in than the rest.
+    assert.equal(tick(menuItem(menu, 'Copy')), '');
+    assert.equal(menuItem(menu, 'Overview').getAttribute('aria-checked'), 'true');
+    assert.equal(menuItem(menu, 'Copy').getAttribute('role'), 'menuitem');
+    assert.equal(menuItem(menu, 'Overview').getAttribute('role'), 'menuitemcheckbox');
+
+    menuItem(menu, 'Overview').dispatch('click');
+    assert.equal(diagram.getViewState().overviewVisible, false);
+
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    menu = host.menu();
+    assert.ok(menu !== null);
+    assert.equal(tick(menuItem(menu, 'Overview')), '');
+    assert.equal(menuItem(menu, 'Overview').getAttribute('aria-checked'), 'false');
+});
+
+test('the fullscreen button follows the same bundle as the menu', async () => {
+    installDom();
+    const bundle = (globalThis.window as unknown as { __designerI18n?: Record<string, string> });
+    bundle.__designerI18n = { fullscreenEnter: '进入全屏', fullscreenExit: '退出全屏' };
+
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    // The whole point of one bundle: a page that translated the menu should not have to name
+    // this button separately through a second mechanism.
+    assert.equal(diagram.getFullscreenLabels().enter, '进入全屏');
+    assert.equal(host.button?.title, '进入全屏');
+
+    // Drawn once, so it needs telling when the language moves; the menu does not.
+    bundle.__designerI18n = { fullscreenEnter: 'Vollbild' };
+    diagram.refreshLabels();
+    assert.equal(host.button?.title, 'Vollbild');
+
+    // An explicit label still wins -- that is what an embedded diagram's data-diagram-fullscreen
+    // becomes, and a per-instance choice must not be overridden by a page-wide default.
+    diagram.setFullscreenLabels({ enter: 'Expand', exit: 'Collapse' });
+    assert.equal(host.button?.title, 'Expand');
+    diagram.refreshLabels();
+    assert.equal(host.button?.title, 'Expand', 'a refresh must not discard the explicit label');
 });
 
 test('a greyed item in the built-in menu is inert, not merely grey', async () => {

@@ -28,6 +28,7 @@ import {
 } from '../canvas-renderer.js';
 import { StockSharpCatalog } from './catalog.js';
 import { ContextMenuView } from './context-menu.js';
+import { t } from '../i18n.js';
 import { EventEmitter } from './event-emitter.js';
 import type {
     DiagramEvents,
@@ -80,9 +81,15 @@ const CONTEXT_MENU: readonly ContextMenuEntry[] = [
     'open',
     'delete',
     { group: 'export', commands: ['exportDocument', 'exportPng', 'exportSvg'] },
+    'overview',
     'properties',
     'help',
 ];
+
+/** Commands that toggle rather than do, so the menu reports their state instead of just enabling them. */
+const CONTEXT_CHECKED: Partial<Record<ContextCommand, (diagram: StockSharpDiagram) => boolean>> = {
+    overview: (diagram) => diagram.getViewState().overviewVisible,
+};
 
 export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private readonly div: HTMLElement;
@@ -101,7 +108,10 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private destroyed = false;
     private fullscreen = false;
     private fullscreenButtonVisible = true;
-    private fullscreenLabels: DiagramFullscreenLabels = { enter: 'Enter fullscreen', exit: 'Exit fullscreen' };
+    // null means the host never named the button, so its wording comes from the shared bundle.
+    // Keeping the two apart is what lets an explicit label win while an untouched control still
+    // follows the page's language instead of being stuck in English.
+    private fullscreenLabels: DiagramFullscreenLabels | null = null;
     private readonly contextActions = new DiagramActionRegistry<ContextCommand, ContextActionContext>();
     private contextMenu: ContextMenuView | null = null;
 
@@ -119,7 +129,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             gridSize: options.gridSize,
         });
         this.fullscreenButtonVisible = options.showFullscreenButton ?? true;
-        this.fullscreenLabels = options.fullscreenLabels ?? this.fullscreenLabels;
+        this.fullscreenLabels = options.fullscreenLabels ?? null;
         this.prepareFullscreenButtonHost();
         this.fullscreenButton = this.createFullscreenButton();
         this.updateFullscreenButton();
@@ -443,8 +453,24 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.updateFullscreenButton();
     }
 
+    /**
+     * Re-reads the shared bundle for text the control renders itself. Call it after changing
+     * the page language: the context menu is rebuilt on every open and needs nothing, but the
+     * fullscreen button is drawn once and would otherwise keep the old wording.
+     */
+    refreshLabels(): void {
+        this.updateFullscreenButton();
+    }
+
     getFullscreenLabels(): DiagramSnapshot<DiagramFullscreenLabels> {
-        return { ...this.fullscreenLabels };
+        return { ...this.resolveFullscreenLabels() };
+    }
+
+    private resolveFullscreenLabels(): DiagramFullscreenLabels {
+        return this.fullscreenLabels ?? {
+            enter: t('fullscreenEnter', 'Enter fullscreen'),
+            exit: t('fullscreenExit', 'Exit fullscreen'),
+        };
     }
 
     /** Updates only the control's state after the host changed its own layout. */
@@ -565,10 +591,14 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 
     getContextCommands(): ContextMenuItemState[] {
         const context = this.contextActionContext();
-        const state = (command: ContextCommand): ContextCommandState => ({
-            command,
-            enabled: this.contextActions.canExecute(command, context),
-        });
+        const state = (command: ContextCommand): ContextCommandState => {
+            const checked = CONTEXT_CHECKED[command];
+            return {
+                command,
+                enabled: this.contextActions.canExecute(command, context),
+                ...(checked === undefined ? {} : { checked: checked(this) }),
+            };
+        };
         return CONTEXT_MENU.map((entry) => {
             if (typeof entry === 'string') return state(entry);
             const commands = entry.commands.map(state);
@@ -709,7 +739,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 
     private updateFullscreenButton(): void {
         const fullscreen = this.fullscreen;
-        const label = fullscreen ? this.fullscreenLabels.exit : this.fullscreenLabels.enter;
+        const labels = this.resolveFullscreenLabels();
+        const label = fullscreen ? labels.exit : labels.enter;
         const path = fullscreen
             ? 'M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5'
             : 'M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5';
@@ -885,6 +916,12 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             exportSvg: {
                 canExecute: ({ document }) => document.nodes.length > 0,
                 execute: () => this.emit('exportRequested', { format: 'svg' }),
+            },
+            // Always available: it shows the overview as readily as it hides it, and an empty
+            // diagram is exactly when someone may want the panel out of the way.
+            overview: {
+                canExecute: () => true,
+                execute: () => this.setOverviewVisible(!this.getViewState().overviewVisible),
             },
             properties: {
                 canExecute: ({ nodes }) => nodes.length > 0,

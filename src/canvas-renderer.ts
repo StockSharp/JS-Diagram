@@ -2086,6 +2086,18 @@ export class Diagram {
     }
 
     // ---- input ------------------------------------------------------
+    // Ends hover and everything hanging off it: highlight, cursor and the delayed tooltip.
+    private clearHover(): void {
+        if (this.hoverPort !== null) this.emit('portHover', { node: this.hoverPort.node, port: this.hoverPort.port, hovering: false });
+        if (this.hoverNode !== null) this.emit('nodeHover', { node: this.hoverNode, hovering: false });
+        if (this.hoveredLink !== null) this.emit('linkHover', { link: this.hoveredLink, hovering: false });
+        this.hoverPort = null; this.hoverNode = null; this.hoveredLink = null;
+        this.tipTarget = null; this.tipShow = false;
+        if (this.tipTimer !== null) { clearTimeout(this.tipTimer); this.tipTimer = null; }
+        this.canvas.style.cursor = 'default';
+        this.scheduleDraw();
+    }
+
     private cancelLongPress(): void {
         if (this.lpTimer !== null) { clearTimeout(this.lpTimer); this.lpTimer = null; }
         this.lpStart = null;
@@ -2111,7 +2123,10 @@ export class Diagram {
         }
         this.dragNode = null; this.dragStart = []; this.rubber = null;
         this.panning = false; this.linking = null; this.relinking = null; this.relinkCandidate = null; this.linkSnap = null;
-        this.scheduleDraw();
+        // A menu is about to cover this spot, and it opens under a cursor that has not moved --
+        // which fires no boundary event, so nothing else would end the hover. Without this the
+        // tooltip armed by the last pointermove appears 400ms later, through the open menu.
+        this.clearHover();
         this.emit('contextMenu', { x: pageX, y: pageY, link, node, port });
     }
 
@@ -2468,16 +2483,7 @@ export class Diagram {
             this.emitViewChanged(true);
             this.scheduleDraw();
         }, { passive: false });
-        this.listen(this.canvas, 'pointerleave', () => {
-            if (this.hoverPort !== null) this.emit('portHover', { node: this.hoverPort.node, port: this.hoverPort.port, hovering: false });
-            if (this.hoverNode !== null) this.emit('nodeHover', { node: this.hoverNode, hovering: false });
-            if (this.hoveredLink !== null) this.emit('linkHover', { link: this.hoveredLink, hovering: false });
-            this.hoverPort = null; this.hoverNode = null; this.hoveredLink = null;
-            this.tipTarget = null; this.tipShow = false;
-            if (this.tipTimer !== null) { clearTimeout(this.tipTimer); this.tipTimer = null; }
-            this.canvas.style.cursor = 'default';
-            this.scheduleDraw();
-        });
+        this.listen(this.canvas, 'pointerleave', () => this.clearHover());
         this.listen(this.canvas, 'dblclick', (e) => {
             const [sx, sy] = localXY(e);
             const [wx, wy] = this.toWorld(sx, sy);

@@ -95,6 +95,11 @@ export interface DesignerI18n {
     copy?: string;
     paste?: string;
     ctxOpen?: string;
+    // Deletes the selected nodes and links. Deliberately not the solution explorer's
+    // `delete`, which removes a whole strategy: same English word, but the object differs,
+    // and a language that declines it -- or a host that writes "Delete strategy..." -- cannot
+    // serve both from one key.
+    ctxDelete?: string;
     // Submenu title, and deliberately not `ctxExport` -- that one is the solution
     // explorer's "export this strategy", a different action that a host may well word
     // differently. Reads as its own item too: "Export as > SVG image".
@@ -102,8 +107,23 @@ export interface DesignerI18n {
     ctxExportDocument?: string;
     ctxExportPng?: string;
     ctxExportSvg?: string;
+    ctxOverview?: string;
     properties?: string;
     ctxHelp?: string;
+
+    // Everything else the control renders by itself. Each of these also has a per-instance
+    // override -- the fullscreenLabels option, or a data-diagram-* attribute on an embedded
+    // host -- and that override wins; these are the defaults when none was given.
+    fullscreenEnter?: string;
+    fullscreenExit?: string;
+    embedErrorLoad?: string;
+    embedErrorEmpty?: string;
+    embedErrorDraw?: string;
+    embedMissingElement?: string;
+
+    // Not the diagram menu: it has no collapse/expand command. Kept for hosts already
+    // shipping them, but moved out of the block above so nobody translates them expecting
+    // to see them in the context menu.
     collapse?: string;
     expand?: string;
 
@@ -205,13 +225,21 @@ export interface DesignerI18n {
     opterr_plotly_missing?: string;
 }
 
-const i18n: DesignerI18n =
-    typeof window === 'undefined'
-        ? {}
-        : (window as unknown as { __designerI18n?: DesignerI18n }).__designerI18n ?? {};
-
 /// Localized string for `key`, or `fallback` (English) when the host
 /// didn't provide it.
+///
+/// The bundle is read on every call rather than captured when this module loads. Capturing
+/// it meant the host had to assign `window.__designerI18n` before the bundle evaluated --
+/// the opposite of the usual order, and impossible for a lazily loaded chunk -- and a host
+/// that assigned it afterwards silently got English with nothing to explain why. Reading it
+/// live also makes assigning and mutating the object behave the same, and lets the language
+/// change mid-session: the only thing reading these keys is the context menu, and it is
+/// built fresh on every right-click.
+///
+/// An empty string counts as missing. Half-finished translation exports routinely emit one,
+/// and a blank menu entry is worse than an English one.
 export function t(key: keyof DesignerI18n, fallback: string): string {
-    return i18n[key] ?? fallback;
+    if (typeof window === 'undefined') return fallback;
+    const value = (window as unknown as { __designerI18n?: DesignerI18n }).__designerI18n?.[key];
+    return value === undefined || value === '' ? fallback : value;
 }

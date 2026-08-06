@@ -813,7 +813,7 @@ export interface FullscreenChangedPayload {
 export interface FullscreenRequestedPayload {
     fullscreen: boolean;
 }
-export type ContextCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'open' | 'delete' | 'exportDocument' | 'exportPng' | 'exportSvg' | 'properties' | 'help';
+export type ContextCommand = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'open' | 'delete' | 'exportDocument' | 'exportPng' | 'exportSvg' | 'overview' | 'properties' | 'help';
 /**
  * Names a submenu rather than something to run. Deliberately outside ContextCommand:
  * `executeContextCommand` takes commands, and a submenu label has nothing to execute.
@@ -827,6 +827,12 @@ export interface ContextCommandPayload {
 export interface ContextCommandState {
     command: ContextCommand;
     enabled: boolean;
+    /**
+     * Present only on commands that toggle something, and then it is the current state --
+     * `overview` is the one today. A menu draws these with a tick rather than as two separate
+     * show/hide entries, which would leave one of them dead at all times.
+     */
+    checked?: boolean;
 }
 /** A submenu: its own enabled state, plus the items to show when it opens. */
 export interface ContextCommandGroupState {
@@ -1169,6 +1175,12 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     isFullscreenButtonVisible(): boolean;
     /** Text of the fullscreen button, for a host that renders in another language. */
     setFullscreenLabels(labels: DiagramSnapshot<DiagramFullscreenLabels>): void;
+    /**
+     * Re-reads the shared bundle for text the control renders itself. Call it after changing
+     * the page language: the context menu is rebuilt on every open and needs nothing, but the
+     * fullscreen button is drawn once and would otherwise keep the old wording.
+     */
+    refreshLabels(): void;
     getFullscreenLabels(): DiagramSnapshot<DiagramFullscreenLabels>;
     /** Updates only the control's state after the host changed its own layout. */
     setFullscreenState(fullscreen: boolean): void;
@@ -1547,12 +1559,20 @@ export interface DesignerI18n {
     copy?: string;
     paste?: string;
     ctxOpen?: string;
+    ctxDelete?: string;
     ctxExportAs?: string;
     ctxExportDocument?: string;
     ctxExportPng?: string;
     ctxExportSvg?: string;
+    ctxOverview?: string;
     properties?: string;
     ctxHelp?: string;
+    fullscreenEnter?: string;
+    fullscreenExit?: string;
+    embedErrorLoad?: string;
+    embedErrorEmpty?: string;
+    embedErrorDraw?: string;
+    embedMissingElement?: string;
     collapse?: string;
     expand?: string;
     fillEmailPassword?: string;
@@ -1651,6 +1671,7 @@ export { DIAGRAM_VIEW_STATE_VERSION, DiagramViewStateError, createDiagramViewSta
 export type { DiagramViewStateDocument } from './core/view-state.js';
 export type { DiagramErrorState, DiagramGlobalErrorKind, DiagramInteractionPermissions, DiagramNodeErrorKind, DiagramNodeErrors, DiagramNodePortRuntimeState, DiagramNodeRuntimeState, DiagramPortDirection, DiagramPortRuntimeState, DiagramRuntimeState, DiagramSelectedPort, DiagramSelection, DiagramSnapshot, DiagramViewState, } from './core/state.js';
 export { StockSharpDiagram, } from './diagram/stocksharp-diagram.js';
+export type { DesignerI18n } from './i18n.js';
 export type { ContextCommand, ContextCommandGroup, ContextCommandGroupState, ContextCommandPayload, ContextCommandState, ContextMenuItemState, ContextMenuRequestedPayload, ExportFormat, ExportRequestedPayload, DiagramEvents, DiagramClipboard, DiagramGridSettings, DiagramLoadOptions, DiagramNodeBounds, DiagramOptions, DiagramPoint, DiagramScreenshotOptions, DiagramScreenshotScope, DiagramThemeOptions, DocumentLoadFailedPayload, LinkChangePayload, LinkHoverPayload, LinkRelinkedPayload, LinkSelectedPayload, LinkValidationPayload, LinkValidationReason, LinkValidationResult, LinkValidator, LinkValidatorArgs, LoadFinishedPayload, NodeChangePayload, NodeErrorKind, NodeErrorOptions, NodeHoverPayload, NodeMovedPayload, NodeSelectedPayload, PortHoverPayload, PortClickAction, PortClickedPayload, PortSelectedPayload, } from './diagram/api.js';
 export { StockSharpCatalog } from './diagram/catalog.js';
 export type { CatalogEvents } from './diagram/catalog.js';

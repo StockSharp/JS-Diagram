@@ -11,47 +11,48 @@
 </head>
 <body>
   <header class="demo-header">
-    <span class="brand">StockSharp JS Strategy Diagram</span>
+    <span class="brand" data-i18n="brand">StockSharp JS Strategy Diagram</span>
     <span id="modelStats" class="model-stats"></span>
     <span class="spacer"></span>
-    <div class="toolbar-cluster" role="group" aria-label="Diagram tools">
-      <button id="resetBtn" class="tbtn icon-only" type="button" title="Reset diagram" aria-label="Reset diagram">
+    <div class="toolbar-cluster" role="group" data-i18n-title="diagramTools" aria-label="Diagram tools">
+      <button id="resetBtn" class="tbtn icon-only" type="button" data-i18n-title="resetDiagram" title="Reset diagram" aria-label="Reset diagram">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v6h6"/><path d="M5.5 9A8 8 0 1 1 4 14"/></svg>
       </button>
-      <button id="undoBtn" class="tbtn icon-only" type="button" title="Undo" aria-label="Undo">
+      <button id="undoBtn" class="tbtn icon-only" type="button" data-i18n-title="undo" title="Undo" aria-label="Undo">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7-5 5 5 5"/><path d="M5 12h8a6 6 0 0 1 6 6"/></svg>
       </button>
-      <button id="redoBtn" class="tbtn icon-only" type="button" title="Redo" aria-label="Redo">
+      <button id="redoBtn" class="tbtn icon-only" type="button" data-i18n-title="redo" title="Redo" aria-label="Redo">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 7 5 5-5 5"/><path d="M19 12h-8a6 6 0 0 0-6 6"/></svg>
       </button>
       <button id="fullscreenBtn" class="tbtn icon-only" type="button" title="Fullscreen" aria-label="Enter fullscreen" aria-pressed="false">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></svg>
       </button>
-      <button id="exportBtn" class="tbtn icon-only" type="button" title="Export PNG" aria-label="Export PNG">
+      <button id="exportBtn" class="tbtn icon-only" type="button" data-i18n-title="exportPng" title="Export PNG" aria-label="Export PNG">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 18v2h14v-2"/></svg>
       </button>
-      <button id="exportSvgBtn" class="tbtn icon-only" type="button" title="Export SVG" aria-label="Export SVG">
+      <button id="exportSvgBtn" class="tbtn icon-only" type="button" data-i18n-title="exportSvg" title="Export SVG" aria-label="Export SVG">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M5 18v2h14v-2"/><path d="M3 9h3M18 9h3"/></svg>
       </button>
     </div>
-    <button id="readonlyBtn" class="tbtn">Read-only</button>
-    <button id="runtimeErrorBtn" class="tbtn error-demo-btn">Run error</button>
-    <button id="loadErrorBtn" class="tbtn error-demo-btn">Broken load</button>
+    <button id="readonlyBtn" class="tbtn" data-i18n="readOnlyBtn">Read-only</button>
+    <button id="runtimeErrorBtn" class="tbtn error-demo-btn" data-i18n="runErrorBtn">Run error</button>
+    <button id="loadErrorBtn" class="tbtn error-demo-btn" data-i18n="brokenLoadBtn">Broken load</button>
+    <button id="langBtn" class="tbtn" type="button" data-i18n="languageBtn">中文</button>
     <button id="themeBtn" class="tbtn icon-only" type="button" title="Switch to light theme" aria-label="Switch to light theme">
       <svg class="theme-light-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4M2 12h2m16 0h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
       <svg class="theme-dark-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 8.5 8.5 0 1 0 20 15.5Z"/></svg>
     </button>
-    <button id="addBtn" class="tbtn primary">+ Node</button>
+    <button id="addBtn" class="tbtn primary" data-i18n="addNode">+ Node</button>
   </header>
 
   <main class="diagram-workspace">
     <aside class="palette-panel">
       <div class="panel-head">
-        <span>Elements</span>
-        <span class="panel-hint">drag to canvas</span>
+        <span data-i18n="elements">Elements</span>
+        <span class="panel-hint" data-i18n="dragToCanvas">drag to canvas</span>
       </div>
       <div class="palette-search-wrap">
-        <input id="paletteSearch" class="palette-search" type="search" placeholder="Search elements…">
+        <input id="paletteSearch" class="palette-search" type="search" data-i18n-placeholder="searchElements" placeholder="Search elements…">
       </div>
       <div id="palette"></div>
     </aside>
@@ -61,49 +62,49 @@
         <span class="symbol">SMA CROSSOVER</span>
         <span>BTC/USDT · 1m</span>
       </div>
-      <div id="diagram" aria-label="Interactive StockSharp strategy diagram"></div>
-      <div class="canvas-help">Right-click for the menu · select a wire to drag its endpoint handles · double-click an indicator to edit</div>
+      <div id="diagram" data-i18n-title="diagramAria" aria-label="Interactive StockSharp strategy diagram"></div>
+      <div class="canvas-help" data-i18n="canvasHelp">Right-click for the menu · select a wire to drag its endpoint handles · double-click an indicator to edit</div>
     </section>
   </main>
 
   <footer class="statusbar">
     <span class="status-dot"></span>
-    <span id="status">Ready.</span>
+    <span id="status" data-i18n="ready">Ready.</span>
     <span class="spacer"></span>
     <span>StockSharpDiagram</span>
   </footer>
 
   <dialog id="indicatorDialog" class="indicator-dialog">
     <form id="indicatorForm" method="dialog">
-      <div class="dialog-kicker">INDICATOR</div>
+      <div class="dialog-kicker" data-i18n="dlgKicker">INDICATOR</div>
       <h2 id="indicatorTitle">Indicator settings</h2>
-      <p>Opened by the host after receiving the node's <code>nodeOpen</code> event.</p>
+      <p data-i18n="dlgNote">Opened by the host after receiving the node's nodeOpen event.</p>
       <label class="dialog-field">
-        <span>Period</span>
+        <span data-i18n="dlgPeriod">Period</span>
         <input id="indicatorPeriod" type="number" min="1" max="1000" step="1" required>
       </label>
       <fieldset class="dialog-port-settings">
-        <legend>Port policy</legend>
+        <legend data-i18n="dlgPortPolicy">Port policy</legend>
         <label class="dialog-field">
-          <span>Input type</span>
+          <span data-i18n="dlgInputType">Input type</span>
           <select id="indicatorInputType">
-            <option value="Candle">Candle only</option>
-            <option value="Object">Object — any data type</option>
+            <option value="Candle" data-i18n="dlgCandleOnly">Candle only</option>
+            <option value="Object" data-i18n="dlgObject">Object — any data type</option>
           </select>
         </label>
         <label class="dialog-check">
           <input id="indicatorInputMulti" type="checkbox">
-          <span>Allow multiple incoming wires</span>
+          <span data-i18n="dlgAllowMultiIn">Allow multiple incoming wires</span>
         </label>
         <label class="dialog-check">
           <input id="indicatorOutputMulti" type="checkbox">
-          <span>Allow output fan-out to multiple inputs</span>
+          <span data-i18n="dlgAllowFanOut">Allow output fan-out to multiple inputs</span>
         </label>
-        <small>Changes apply to the live ports without reloading the diagram.</small>
+        <small data-i18n="dlgPortsNote">Changes apply to the live ports without reloading the diagram.</small>
       </fieldset>
       <div class="dialog-actions">
-        <button class="tbtn" type="button" id="indicatorCancelBtn">Cancel</button>
-        <button class="tbtn primary" type="submit">Apply</button>
+        <button class="tbtn" type="button" id="indicatorCancelBtn" data-i18n="dlgCancel">Cancel</button>
+        <button class="tbtn primary" type="submit" data-i18n="dlgApply">Apply</button>
       </div>
     </form>
   </dialog>

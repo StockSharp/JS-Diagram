@@ -1,3 +1,4 @@
+import { applyLanguage, fmt, language, strings, type DemoLanguage } from './i18n';
 import {
     DiagramNode,
     Link,
@@ -49,73 +50,83 @@ const catalog = new StockSharpCatalog();
     new PortType({ name: 'Object', color: 'hsl(215, 16%, 62%)' }),
 ].forEach((type) => catalog.addPortType(type));
 
-[
-    new Node({
-        id: 'market-data',
-        name: 'Market Data',
-        description: 'Streams candles for the selected instrument.',
-        groupName: 'Sources',
-        icon: svgIcon('MD', '#4aa3ff'),
-        outPorts: [{ id: 'candles', name: 'Candles', type: 'Candle' }],
-    }),
-    new Node({
-        id: 'sma',
-        name: 'Simple Moving Average',
-        description: 'Calculates a moving average over candle closes.',
-        groupName: 'Indicators',
-        icon: svgIcon('MA', '#a779e9'),
-        openAction: 'indicatorSettings',
-        parameters: [{
-            name: 'Period', displayName: 'Period', description: 'Moving-average length.',
-            type: 'number', defaultValue: '20', options: [], min: 1, max: 1000,
-            displayOrder: 1, category: 'General', isBasic: true, editorType: '',
-        }],
-        inPorts: [{ id: 'source', name: 'Source', type: 'Candle', maxLinks: 1 }],
-        outPorts: [{ id: 'value', name: 'Value', type: 'Decimal' }],
-    }),
-    new Node({
-        id: 'crossing',
-        name: 'Crossing',
-        description: 'Emits true when the fast value crosses the slow value.',
-        groupName: 'Logic',
-        icon: svgIcon('X', '#f0b90b'),
-        inPorts: [
-            { id: 'fast', name: 'Fast', type: 'Decimal', maxLinks: 1 },
-            { id: 'slow', name: 'Slow', type: 'Decimal', maxLinks: 1 },
-        ],
-        outPorts: [{ id: 'signal', name: 'Signal', type: 'Boolean' }],
-    }),
-    new Node({
-        id: 'order-builder',
-        name: 'Order Builder',
-        description: 'Creates a market order from a Boolean signal.',
-        groupName: 'Trading',
-        icon: svgIcon('OR', '#f6465d'),
-        inPorts: [{ id: 'signal', name: 'Signal', type: 'Boolean', maxLinks: 1 }],
-        outPorts: [{ id: 'order', name: 'Order', type: 'Order' }],
-    }),
-    new Node({
-        id: 'connector',
-        name: 'Broker Connector',
-        description: 'Submits orders and publishes own trades.',
-        groupName: 'Execution',
-        icon: svgIcon('BR', '#0ecb81'),
-        inPorts: [{ id: 'order', name: 'Order', type: 'Order' }],
-        outPorts: [{ id: 'trade', name: 'Trade', type: 'Trade' }],
-    }),
-    new Node({
-        id: 'chart',
-        name: 'Chart',
-        description: 'Visualizes candles and executions.',
-        groupName: 'Visualization',
-        icon: svgIcon('CH', '#45c2d6'),
-        inPorts: [
-            { id: 'candles', name: 'Candles', type: 'Candle' },
-            { id: 'trades', name: 'Trades', type: 'Trade' },
-            { id: 'object', name: 'Any object', type: 'Object' },
-        ],
-    }),
-].forEach((node) => catalog.addNodeType(node));
+// Built from the current dictionary rather than from literals: node types are host data, so a
+// localized application localizes its palette too. Re-registering an id replaces the definition
+// and the catalog tells the palette to redraw, which is all a language switch has to do.
+// Port *type* names (Candle, Decimal, ...) stay put -- they are identifiers that links match on,
+// not captions.
+function nodeTypes(): Node[] {
+    const s = strings();
+    return [
+        new Node({
+            id: 'market-data',
+            name: s.nodeMarketData,
+            description: s.nodeMarketDataDesc,
+            groupName: s.grpSources,
+            icon: svgIcon('MD', '#4aa3ff'),
+            outPorts: [{ id: 'candles', name: s.portCandles, type: 'Candle' }],
+        }),
+        new Node({
+            id: 'sma',
+            name: s.nodeSma,
+            description: s.nodeSmaDesc,
+            groupName: s.grpIndicators,
+            icon: svgIcon('MA', '#a779e9'),
+            openAction: 'indicatorSettings',
+            parameters: [{
+                name: 'Period', displayName: s.dlgPeriod, description: s.nodeSmaPeriodDesc,
+                type: 'number', defaultValue: '20', options: [], min: 1, max: 1000,
+                displayOrder: 1, category: 'General', isBasic: true, editorType: '',
+            }],
+            inPorts: [{ id: 'source', name: s.portSource, type: 'Candle', maxLinks: 1 }],
+            outPorts: [{ id: 'value', name: s.portValue, type: 'Decimal' }],
+        }),
+        new Node({
+            id: 'crossing',
+            name: s.nodeCrossing,
+            description: s.nodeCrossingDesc,
+            groupName: s.grpLogic,
+            icon: svgIcon('X', '#f0b90b'),
+            inPorts: [
+                { id: 'fast', name: s.portFast, type: 'Decimal', maxLinks: 1 },
+                { id: 'slow', name: s.portSlow, type: 'Decimal', maxLinks: 1 },
+            ],
+            outPorts: [{ id: 'signal', name: s.portSignal, type: 'Boolean' }],
+        }),
+        new Node({
+            id: 'order-builder',
+            name: s.nodeOrderBuilder,
+            description: s.nodeOrderBuilderDesc,
+            groupName: s.grpTrading,
+            icon: svgIcon('OR', '#f6465d'),
+            inPorts: [{ id: 'signal', name: s.portSignal, type: 'Boolean', maxLinks: 1 }],
+            outPorts: [{ id: 'order', name: s.portOrder, type: 'Order' }],
+        }),
+        new Node({
+            id: 'connector',
+            name: s.nodeConnector,
+            description: s.nodeConnectorDesc,
+            groupName: s.grpExecution,
+            icon: svgIcon('BR', '#0ecb81'),
+            inPorts: [{ id: 'order', name: s.portOrder, type: 'Order' }],
+            outPorts: [{ id: 'trade', name: s.portTrade, type: 'Trade' }],
+        }),
+        new Node({
+            id: 'chart',
+            name: s.nodeChart,
+            description: s.nodeChartDesc,
+            groupName: s.grpVisualization,
+            icon: svgIcon('CH', '#45c2d6'),
+            inPorts: [
+                { id: 'candles', name: s.portCandles, type: 'Candle' },
+                { id: 'trades', name: s.portTrade, type: 'Trade' },
+                { id: 'object', name: s.portAnyObject, type: 'Object' },
+            ],
+        }),
+    ];
+}
+
+nodeTypes().forEach((node) => catalog.addNodeType(node));
 
 const palette = new StockSharpPalette({ div: paletteHost, catalog });
 const diagram = new StockSharpDiagram({
@@ -128,7 +139,7 @@ const diagram = new StockSharpDiagram({
 palette.on('nodeActivated', ({ node: activated }) => {
     const rect = diagramHost.getBoundingClientRect();
     diagram.dropNodeFromPalette(activated.id, rect.left + rect.width / 2, rect.top + rect.height / 2);
-    setStatus(`Added from palette: ${activated.name}`);
+    setStatus(fmt(strings().addedFromPalette, activated.name));
 });
 palette.on('contextMenuRequested', ({ node: requested }) => {
     setStatus(requested.description.length > 0 ? requested.description : requested.name);
@@ -186,9 +197,26 @@ function setStatus(message: string): void {
     status.textContent = message;
 }
 
+// Two dictionaries change at once: the control's, through window.__designerI18n, and the
+// demo's own. Only the context menu comes from the control -- right-click after switching and
+// it is Chinese too, which is the quickest way to see whether the package is localized at all.
+// The switch happens live, with no reload: the menu re-reads the bundle every time it opens.
+const languageButton = requireElement<HTMLButtonElement>('#langBtn');
+function setLanguage(next: DemoLanguage): void {
+    applyLanguage(next);
+    nodeTypes().forEach((type) => catalog.addNodeType(type));
+    // The control draws its fullscreen button once, so unlike the menu it has to be told the
+    // language moved. The menu needs nothing: it is rebuilt, and re-reads the bundle, on open.
+    diagram.refreshLabels();
+    applyTheme();
+    updateState();
+    setStatus(strings().languageSwitched);
+}
+languageButton.addEventListener('click', () => setLanguage(language() === 'en' ? 'zh' : 'en'));
+
 function updateState(): void {
     const model = diagram.save();
-    modelStats.textContent = `${model.nodes.length} nodes · ${model.links.length} links`;
+    modelStats.textContent = fmt(strings().stats, model.nodes.length, model.links.length);
     requireElement<HTMLButtonElement>('#undoBtn').disabled = !diagram.canUndo();
     requireElement<HTMLButtonElement>('#redoBtn').disabled = !diagram.canRedo();
 }
@@ -199,26 +227,26 @@ function applyTheme(): void {
         ? { diagramBackground: '#f5f7fa', gridColor: '#e2e8f0', linkMaxLightness: 0.42 }
         : { diagramBackground: '#131820', gridColor: '#1e2633', linkMaxLightness: 1 });
     diagram.applySocketTheme();
-    const nextTheme = light ? 'dark' : 'light';
     themeButton.classList.toggle('is-light', light);
-    themeButton.title = `Switch to ${nextTheme} theme`;
-    themeButton.setAttribute('aria-label', `Switch to ${nextTheme} theme`);
+    const themeLabel = light ? strings().themeDark : strings().themeLight;
+    themeButton.title = themeLabel;
+    themeButton.setAttribute('aria-label', themeLabel);
 }
 
 function reset(nodeErrors: Readonly<Record<string, string>> = {}): void {
     diagram.load(seedNodes(), seedLinks(), { nodeErrors });
     diagram.zoomToFit();
-    setStatus('Strategy model reset.');
+    setStatus(strings().modelReset);
     updateState();
 }
 
 diagram.on('nodeSelected', ({ node: selected }) => {
-    setStatus(selected === null ? 'Selection cleared.' : `Selected: ${selected.name}`);
+    setStatus(selected === null ? strings().selectionCleared : fmt(strings().selected, selected.name));
 });
 diagram.on('nodeAdded', ({ nodes }) => {
     const added = nodes[0];
     if (added === undefined) return;
-    setStatus(`Added: ${added.name}`);
+    setStatus(fmt(strings().added, added.name));
     updateState();
 });
 diagram.on('nodeRemoved', updateState);
@@ -229,24 +257,25 @@ diagram.on('undoStackChanged', updateState);
 diagram.on('linkAdded', ({ links }) => {
     const link = links[0];
     if (link === undefined) return;
-    setStatus(`Connected ${String(link.outNode)} → ${String(link.inNode)}`);
+    setStatus(fmt(strings().connected, String(link.outNode), String(link.inNode)));
     updateState();
 });
 diagram.on('linkRemoved', updateState);
 diagram.on('linkRelinked', ({ link }) => {
-    setStatus(`Relinked ${String(link.outNode)} → ${String(link.inNode)}.`);
+    setStatus(fmt(strings().relinked, String(link.outNode), String(link.inNode)));
 });
 diagram.on('linkValidation', ({ allowed, reason }) => {
     if (allowed) return;
+    const text = strings();
     const messages: Partial<Record<typeof reason, string>> = {
-        'duplicate-link': 'Rejected: that exact output/input pair is already connected.',
-        'source-limit': 'Rejected: the output does not allow another wire.',
-        'target-limit': 'Rejected: the input does not allow another wire.',
-        'incompatible-type': 'Rejected: socket types are incompatible.',
-        'same-node': 'Rejected: a node cannot connect to itself.',
-        'host-rejected': 'Rejected by the host application.',
+        'duplicate-link': text.rejectDuplicate,
+        'source-limit': text.rejectSourceLimit,
+        'target-limit': text.rejectTargetLimit,
+        'incompatible-type': text.rejectIncompatible,
+        'same-node': text.rejectSameNode,
+        'host-rejected': text.rejectHost,
     };
-    setStatus(messages[reason] ?? `Rejected: ${reason}.`);
+    setStatus(messages[reason] ?? fmt(text.rejectOther, reason));
 });
 // The toolbar button and the diagram's built-in button both toggle our own window overlay -- not the browser
 // Fullscreen API, which hides everything outside the panel and would take the toolbar button with it. Either
@@ -257,7 +286,7 @@ const setDiagramExpanded = (value: boolean): void => {
     if (expanded === value) return;
     expanded = value;
     canvasPanel.classList.toggle('is-fullscreen', value);
-    const label = value ? 'Exit fullscreen' : 'Enter fullscreen';
+    const label = value ? strings().exitFullscreen : strings().enterFullscreen;
     fullscreenButton.classList.toggle('is-active', value);
     fullscreenButton.title = label;
     fullscreenButton.setAttribute('aria-label', label);
@@ -267,7 +296,7 @@ const setDiagramExpanded = (value: boolean): void => {
         diagram.resize(diagramHost.clientWidth, diagramHost.clientHeight);
         diagram.zoomToFit();
     });
-    setStatus(value ? 'Diagram expanded to fill the window.' : 'Diagram restored.');
+    setStatus(value ? strings().diagramExpanded : strings().diagramRestored);
 };
 
 diagram.on('fullscreenRequested', ({ fullscreen }) => setDiagramExpanded(fullscreen));
@@ -296,7 +325,7 @@ diagram.on('nodeOpen', ({ nodes }) => {
     indicatorDialog.showModal();
     indicatorPeriod.focus();
     indicatorPeriod.select();
-    setStatus(`Opened indicator settings: ${selected.name}`);
+    setStatus(fmt(strings().openedIndicator, selected.name));
 });
 
 indicatorForm.addEventListener('submit', (event) => {
@@ -316,9 +345,14 @@ indicatorForm.addEventListener('submit', (event) => {
             maxLinks: indicatorOutputMulti.checked ? 0 : 1,
         });
     });
-    setStatus(`Updated ${baseName}: period ${period}, input ${indicatorInputType.value}, `
-        + `fan-in ${indicatorInputMulti.checked ? 'multiple' : 'single'}, `
-        + `fan-out ${indicatorOutputMulti.checked ? 'multiple' : 'single'}.`);
+    setStatus(fmt(
+        strings().updatedIndicator,
+        baseName,
+        period,
+        indicatorInputType.value,
+        indicatorInputMulti.checked ? 'multiple' : 'single',
+        indicatorOutputMulti.checked ? 'multiple' : 'single',
+    ));
     indicatorDialog.close();
     activeIndicator = null;
 });
@@ -342,7 +376,7 @@ diagramHost.addEventListener('drop', (event) => {
         if (typeof payload.typeId === 'string')
             diagram.dropNodeFromPalette(payload.typeId, event.clientX, event.clientY);
     } catch {
-        setStatus('Palette drop payload is invalid.');
+        setStatus(strings().paletteDropInvalid);
     }
 });
 
@@ -376,26 +410,26 @@ const exportOptions = { scope: 'content', padding: 40, includeOverview: false, i
 diagram.on('exportRequested', ({ format }) => {
     if (format === 'document') {
         download(new Blob([JSON.stringify(diagram.saveDocument(), null, 2)], { type: 'application/json' }), 'stocksharp-strategy.json');
-        setStatus('Scheme exported as JSON.');
+        setStatus(strings().schemeExported);
         return;
     }
     if (format === 'svg') {
         download(new Blob([diagram.takeSvg(exportOptions)], { type: 'image/svg+xml' }), 'stocksharp-strategy.svg');
-        setStatus('Full strategy exported as vector.');
+        setStatus(strings().vectorExported);
         return;
     }
     diagram.takeScreenshot({ ...exportOptions, pixelRatio: 2 }).toBlob((blob) => {
         if (blob === null) {
-            setStatus('The browser could not encode the diagram image.');
+            setStatus(strings().imageFailed);
             return;
         }
         download(blob, 'stocksharp-strategy.png');
-        setStatus('Full strategy image exported.');
+        setStatus(strings().imageExported);
     }, 'image/png');
 });
 
 diagram.on('nodeProperties', ({ nodes }) => {
-    setStatus(`Properties requested for ${nodes.map((node) => node.name).join(', ')}.`);
+    setStatus(fmt(strings().propertiesRequested, nodes.map((node) => node.name).join(', ')));
 });
 
 requireElement<HTMLButtonElement>('#exportBtn').addEventListener('click', () => {
@@ -406,13 +440,13 @@ requireElement<HTMLButtonElement>('#exportSvgBtn').addEventListener('click', () 
 });
 requireElement<HTMLButtonElement>('#runtimeErrorBtn').addEventListener('click', () => {
     diagram.setNodeError('orders', 'Order Builder failed: order volume is not configured.');
-    setStatus('Runtime error highlighted on Buy on cross. Hover the node for details.');
+    setStatus(strings().runtimeErrorShown);
 });
 requireElement<HTMLButtonElement>('#loadErrorBtn').addEventListener('click', () => {
     reset({
         slow: 'Scheme load failed for Slow SMA: the saved Period value is invalid.',
     });
-    setStatus('Loaded a damaged scheme. Hover the red node for details.');
+    setStatus(strings().brokenLoadShown);
 });
 themeButton.addEventListener('click', () => {
     light = !light; applyTheme();
@@ -423,7 +457,7 @@ requireElement<HTMLButtonElement>('#readonlyBtn').addEventListener('click', (eve
     const button = event.currentTarget as HTMLButtonElement;
     button.classList.toggle('on', readOnly);
     button.textContent = readOnly ? '● Locked' : 'Read-only';
-    setStatus(readOnly ? 'Read-only preview mode.' : 'Editing enabled.');
+    setStatus(readOnly ? strings().readOnlyMode : strings().editingEnabled);
 });
 requireElement<HTMLButtonElement>('#addBtn').addEventListener('click', () => {
     const id = `indicator-${customSequence++}`;
