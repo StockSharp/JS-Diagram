@@ -581,6 +581,8 @@ export class Diagram {
     private introStart: number | null = null;
     private overviewVisible = true;
     private ovDragging = false;
+    private historyShortcut: (direction: 'undo' | 'redo') => void =
+        (direction) => { if (direction === 'undo') this.undo(); else this.redo(); };
     private ovGeo: { x: number; y: number; w: number; h: number; s: number; minX: number; minY: number } | null = null;
 
     private validator: LinkValidator | null = null;
@@ -1312,6 +1314,14 @@ export class Diagram {
             overviewVisible: this.overviewVisible,
         };
     }
+    /**
+     * Replaces what Ctrl+Z / Ctrl+Y do. Passing null restores the built-in behaviour, which is
+     * plain undo()/redo() -- so a renderer used on its own keeps its keyboard history.
+     */
+    setHistoryShortcutHandler(handler: ((direction: 'undo' | 'redo') => void) | null): void {
+        this.historyShortcut = handler ?? ((direction) => { if (direction === 'undo') this.undo(); else this.redo(); });
+    }
+
     setViewState(state: DiagramViewState): void {
         if (!Number.isFinite(state.zoom) || !Number.isFinite(state.panX) || !Number.isFinite(state.panY)) {
             throw new RangeError('ssdiagram: view state zoom and pan must be finite numbers');
@@ -2598,10 +2608,13 @@ export class Diagram {
                 e.preventDefault(); this.cutSelection(); return;
             }
             if (mod && this.permissions.select && e.code === 'KeyA') { e.preventDefault(); this.setSelection(this.nodes.slice()); return; }
-            // Ctrl+Z = undo; Ctrl+Y or Ctrl+Shift+Z = redo.
-            if (mod && this.permissions.history && e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); this.undo(); return; }
+            // Ctrl+Z = undo; Ctrl+Y or Ctrl+Shift+Z = redo. Routed through a handler rather than
+            // called directly: a component wrapping this renderer has its own rules about when
+            // history may run and its own events to announce it, and the keyboard must obey them
+            // like every other entry point.
+            if (mod && this.permissions.history && e.code === 'KeyZ' && !e.shiftKey) { e.preventDefault(); this.historyShortcut('undo'); return; }
             if (mod && this.permissions.history && (e.code === 'KeyY' || (e.code === 'KeyZ' && e.shiftKey))) {
-                e.preventDefault(); this.redo(); return;
+                e.preventDefault(); this.historyShortcut('redo'); return;
             }
         });
     }

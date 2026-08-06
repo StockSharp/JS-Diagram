@@ -333,6 +333,11 @@ export declare class Diagram {
     selectLinkById(id: string | null): void;
     selectPortById(nodeId: string, direction: PortDirection, portId: string): void;
     getViewState(): DiagramViewState;
+    /**
+     * Replaces what Ctrl+Z / Ctrl+Y do. Passing null restores the built-in behaviour, which is
+     * plain undo()/redo() -- so a renderer used on its own keeps its keyboard history.
+     */
+    setHistoryShortcutHandler(handler: ((direction: 'undo' | 'redo') => void) | null): void;
     setViewState(state: DiagramViewState): void;
     findNode(id: string): NodeModel | undefined;
     requestRedraw(): void;

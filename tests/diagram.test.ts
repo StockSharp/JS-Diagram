@@ -2724,3 +2724,48 @@ test('setZoom() and setViewState() reject non-finite numbers with RangeError ins
         + 'serialize the viewport.',
     );
 });
+
+test('Ctrl+Z obeys enableUndo(false) and, when allowed, announces itself as undoRequested', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'node', name: 'Node', x: 40, y: 60 })], []);
+
+    const pressCtrlZ = (): void => {
+        host.canvas!.dispatch('keydown', {
+            key: 'z', code: 'KeyZ', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false,
+        });
+    };
+
+    // One undoable step, then the host takes undo away: the menu and the API already refuse it.
+    diagram.moveNode('node', 140, 160);
+    assert.deepEqual(
+        [diagram.getNodeBounds('node')!.x, diagram.getNodeBounds('node')!.y], [140, 160],
+        'setup: the node must actually have moved, or a later reading of 40,60 would prove nothing',
+    );
+    diagram.enableUndo(false);
+    assert.equal(diagram.canUndo(), false, 'setup: enableUndo(false) must already make the API refuse undo');
+    pressCtrlZ();
+    const blocked = diagram.getNodeBounds('node')!;
+
+    // A fresh undoable step so the second half is not trivially satisfied by an empty stack.
+    diagram.enableUndo(true);
+    diagram.moveNode('node', 240, 260);
+    const undoRequests: unknown[] = [];
+    diagram.on('undoRequested', (snapshot) => undoRequests.push(snapshot));
+    pressCtrlZ();
+
+    assert.deepEqual(
+        { positionAfterBlockedCtrlZ: [blocked.x, blocked.y], undoRequestedEvents: undoRequests.length },
+        { positionAfterBlockedCtrlZ: [140, 160], undoRequestedEvents: 1 },
+        'Ctrl+Z on the canvas must go through the facade: it must be refused while enableUndo(false) '
+        + '(node stays at 140,160) and must emit undoRequested once when undo is allowed. A moved-back '
+        + 'node means the keyboard bypassed enableUndo; zero events mean a host listening for undo '
+        + 'never learns about keyboard undo.',
+    );
+});

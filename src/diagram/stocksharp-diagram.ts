@@ -134,6 +134,11 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.fullscreenButton = this.createFullscreenButton();
         this.updateFullscreenButton();
         this.setContextMenuEnabled(options.showContextMenu ?? true);
+        // The keyboard is an entry point like the menu and the toolbar, so it goes through the
+        // same undo()/redo() -- which respect enableUndo/enableRedo and emit undoRequested.
+        this.canvas.setHistoryShortcutHandler((direction) => {
+            if (direction === 'undo') this.undo(); else this.redo();
+        });
         this.registerContextActions();
         this.bindCanvasEvents();
         this.disposables.push(this.catalog.on('portTypesChanged', () => this.applySocketTheme()));
