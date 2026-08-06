@@ -3287,3 +3287,23 @@ test('a node whose id is "__proto__" keeps its runtime state like any other node
         );
     });
 });
+
+test('undoStackChanged from a history change reports the permission-gated canUndo/canRedo', () => {
+    const { diagram } = makeDiagram();
+    diagram.load([source, sink], []);
+
+    const events: Array<{ canUndo: boolean; canRedo: boolean }> = [];
+    diagram.on('undoStackChanged', (state) => events.push(state));
+
+    diagram.setInteractionPermissions({ history: false });
+    diagram.moveNode('source', 100, 200);   // records an undo step → history listener fires
+
+    assert.equal(diagram.canUndo(), false, 'setup: with permissions.history off, canUndo() must already be false');
+    assert.deepEqual(
+        events[events.length - 1],
+        { canUndo: false, canRedo: false },
+        'The undoStackChanged emitted from the history listener must carry the same gated values as '
+        + 'canUndo()/canRedo() — the ones setInteractionPermissions()/setReadOnly() emit. canUndo:true '
+        + 'here means a toolbar enables an Undo button that undo() will refuse.',
+    );
+});

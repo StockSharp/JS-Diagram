@@ -596,8 +596,11 @@ export class Diagram {
         this.host = opts.host;
         this.gridSnapEnabled = opts.gridSnap ?? false;
         this.gridSize = this.normalizeGridSize(opts.gridSize ?? DEFAULT_GRID_SIZE);
-        this.history = new DiagramCommandHistory(({ canUndo, canRedo }) => {
-            this.emit('undoStackChanged', { canUndo, canRedo });
+        this.history = new DiagramCommandHistory(() => {
+            // The gated values, not the raw stack: setInteractionPermissions and setReadOnly
+            // already publish canUndo()/canRedo(), and a toolbar fed the raw pair enabled its
+            // Undo button for a call that undo() would refuse.
+            this.emit('undoStackChanged', { canUndo: this.canUndo(), canRedo: this.canRedo() });
         });
         this.canvas = document.createElement('canvas');
         this.canvas.style.display = 'block';
