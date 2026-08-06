@@ -3503,3 +3503,31 @@ test('a port type that differs only in case still gets its catalog colour', asyn
 
     diagram.destroy();
 });
+
+test('right-clicking the open menu suppresses the browser menu', async () => {
+    installDom();
+    const { StockSharpCatalog: Catalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new Catalog(),
+    });
+
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    const menu = host.menu();
+    assert.notEqual(menu, null, 'the menu did not open, so this test is not exercising the finding');
+
+    // A right-click anywhere in the panel reaches its root. The canvas handler cannot help: the
+    // menu is mounted beside the canvas, not inside it.
+    let prevented = 0;
+    menu!.dispatch('contextmenu', {
+        clientX: 70,
+        clientY: 70,
+        preventDefault: () => { prevented += 1; },
+    });
+
+    assert.equal(prevented, 1,
+        'the menu let the browser draw its own context menu over ours, because the panel has no contextmenu handler');
+
+    diagram.destroy();
+});

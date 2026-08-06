@@ -124,6 +124,12 @@ export class ContextMenuView {
             if (SEPARATE_AFTER.has(id) && index < items.length - 1) root.appendChild(this.separator(owner));
         });
 
+        // A right-click inside our own menu is not "outside", so the dismissal watcher lets it
+        // through -- and the canvas listener that suppresses the native menu never sees it,
+        // because the menu is not a child of the canvas. Without this the browser drew its own
+        // menu on top of ours, leaving two stacked over each other.
+        this.on(root, 'contextmenu', (event) => { event.preventDefault(); });
+
         this.container.appendChild(root);
         this.root = root;
         this.place(root, x, y);
