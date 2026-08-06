@@ -507,3 +507,34 @@ test('a host whose embed failed is rendered again by the next renderAll', async 
     assert.equal(host.classList.contains('ss-diagram-error'), false,
         'the error note survived a successful re-render');
 });
+
+test('a shorthand --diagram-bg is read as the light canvas it names', async () => {
+    // Both spellings name the same white. The link palette is picked from that colour, so the two
+    // have to land on the same theme.
+    const lightnessFor = async (background: string): Promise<number | undefined> => {
+        installDom((async () => paletteResponse()) as unknown as typeof fetch);
+        // The canvas colour the embed reads is a custom property on the document element.
+        Object.assign(globalThis, {
+            getComputedStyle: () => ({
+                getPropertyValue: (name: string) => (name === '--diagram-bg' ? background : ''),
+            }),
+        });
+        const host = new FakeHost();
+        const scheme: DiagramEmbedScheme = { nodes: [], links: [] };
+        const handle = await renderScheme(host as unknown as HTMLElement, '/palette.json', scheme);
+        assert.notEqual(handle, null, `renderScheme drew nothing for ${background}`);
+        // The chosen palette is not published anywhere public, so the canvas option it was written
+        // into is the only place to read it back.
+        const lightness = (handle!.diagram as unknown as {
+            canvas: { opts: { linkMaxLightness?: number } };
+        }).canvas.opts.linkMaxLightness;
+        handle!.destroy();
+        return lightness;
+    };
+
+    assert.equal(await lightnessFor('#ffffff'), 0.42,
+        'long-form white did not select the light link palette, so this test is not exercising the finding');
+
+    assert.equal(await lightnessFor('#fff'), 0.42,
+        'shorthand #fff scored luminance 0, so a white canvas is classified as dark and draws near-invisible links');
+});

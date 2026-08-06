@@ -73,12 +73,61 @@ function iconUrl(name: string): string {
 
 // Perceived luminance (0..255) of a #rrggbb colour; used to tell a light diagram canvas from a dark
 // one so the (dark-canvas-tuned) link palette can be darkened when the canvas is light.
-function luminance(hex: string): number {
-	const m = hex.match(/^#?([0-9a-fA-F]{6})$/);
-	if (m === null)
-		return 0;
-	const n = parseInt(m[1], 16);
-	return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+const CSS_COLOR_KEYWORDS: Readonly<Record<string, [number, number, number]>> = {
+	white: [255, 255, 255],
+	black: [0, 0, 0],
+	transparent: [255, 255, 255],
+};
+
+/**
+ * Perceived brightness of a CSS colour, or -1 when it cannot be read.
+ *
+ * Six-digit hex was the only form understood, and everything else answered 0 -- black. A page
+ * writing --diagram-bg as #fff, white or rgb(255 255 255) therefore had its white canvas
+ * classified as dark and got the dark link palette: near-white wires on a near-white background.
+ * Unreadable is now -1 rather than 0, so the caller can keep its own default instead of being
+ * told the page is black.
+ */
+function luminance(color: string): number {
+	const value = color.trim().toLowerCase();
+	if (value === '')
+		return -1;
+
+	const keyword = CSS_COLOR_KEYWORDS[value];
+	if (keyword !== undefined)
+		return 0.299 * keyword[0] + 0.587 * keyword[1] + 0.114 * keyword[2];
+
+	const long = value.match(/^#?([0-9a-f]{6})$/);
+	if (long !== null) {
+		const n = parseInt(long[1], 16);
+		return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+	}
+
+	// #abc is shorthand for #aabbcc, and the eight-digit forms carry an alpha we ignore.
+	const short = value.match(/^#?([0-9a-f]{3})([0-9a-f])?$/);
+	if (short !== null) {
+		const [r, g, b] = [...short[1]].map((digit) => parseInt(digit + digit, 16));
+		return 0.299 * r + 0.587 * g + 0.114 * b;
+	}
+	const long8 = value.match(/^#?([0-9a-f]{6})[0-9a-f]{2}$/);
+	if (long8 !== null) {
+		const n = parseInt(long8[1], 16);
+		return 0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255);
+	}
+
+	// rgb()/rgba(), both the comma and the space syntax.
+	const rgb = value.match(/^rgba?\(([^)]+)\)$/);
+	if (rgb !== null) {
+		const parts = rgb[1].split(/[\s,/]+/).filter((part) => part !== '');
+		if (parts.length >= 3) {
+			const [r, g, b] = parts.slice(0, 3).map((part) => part.endsWith('%')
+				? (parseFloat(part) / 100) * 255
+				: parseFloat(part));
+			if ([r, g, b].every((channel) => Number.isFinite(channel)))
+				return 0.299 * r + 0.587 * g + 0.114 * b;
+		}
+	}
+	return -1;
 }
 
 function makePort(p: PalettePort): Port {
@@ -396,6 +445,7 @@ async function renderSchemeAtRevision(
 			diagram.setTheme({
 				diagramBackground: bg,
 				gridColor,
+				// Unreadable colours keep the dark default rather than being treated as black.
 				linkMaxLightness: luminance(bg) > 140 ? 0.42 : 1,
 			});
 		};
