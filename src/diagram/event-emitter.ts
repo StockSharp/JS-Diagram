@@ -32,7 +32,13 @@ export class EventEmitter<TEvents extends object> {
         if (set === undefined) {
             return;
         }
-        for (const handler of set) {
+        // Snapshot: a Set iterated live delivers to handlers subscribed during the very
+        // delivery, and the ordinary "unsubscribe then resubscribe" throttle appends to the
+        // set being walked -- with two such listeners that never terminates and hangs the tab.
+        // Re-checking membership then keeps an unsubscribe honest: a handler removed by an
+        // earlier one, or by clearEventHandlers/destroy, must not still be called.
+        for (const handler of [...set]) {
+            if (!set.has(handler)) continue;
             try {
                 (handler as EventHandler<TEvents[K]>)(payload);
             } catch (err) {
@@ -50,6 +56,9 @@ export class EventEmitter<TEvents extends object> {
     }
 
     protected clearEventHandlers(): void {
+        // Empty the sets as well as the map: an emit already in flight holds a reference to its
+        // set, and dropping only the map entry would leave it delivering to a torn-down subject.
+        for (const set of this.handlers.values()) set.clear();
         this.handlers.clear();
     }
 }
