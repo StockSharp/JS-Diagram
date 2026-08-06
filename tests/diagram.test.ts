@@ -2591,3 +2591,45 @@ test('loading a document without zones clears the ones already on the canvas', (
 
     assert.deepEqual(diagram.saveDocument().zones, []);
 });
+
+test('a document with a duplicate zone id is rejected on the way in, not on the way out', () => {
+    const { diagram } = makeDiagram();
+    const duplicate = JSON.stringify({
+        version: 1,
+        nodes: [],
+        links: [],
+        zones: [
+            { id: 'z1', name: 'One', x: 0, y: 0, width: 100, height: 80, color: '', metadata: {} },
+            { id: 'z1', name: 'Two', x: 0, y: 120, width: 100, height: 80, color: '', metadata: {} },
+        ],
+        metadata: {},
+    });
+
+    // The builder has always refused this, so a file the parser accepts is one the very next
+    // saveDocument() -- which rebuilds through the builder -- cannot write. That asymmetry is the
+    // bug: the strategy opens, draws, and can never be saved again.
+    let built: Error | null = null;
+    try {
+        createDiagramDocument({ zones: [
+            { id: 'z1', name: 'One', x: 0, y: 0, width: 100, height: 80 },
+            { id: 'z1', name: 'Two', x: 0, y: 120, width: 100, height: 80 },
+        ] });
+    } catch (error) {
+        built = error instanceof Error ? error : new Error(String(error));
+    }
+    assert.ok(built !== null, 'createDiagramDocument is supposed to reject a duplicate zone id');
+
+    let parsed: Error | null = null;
+    try {
+        diagram.loadDocument(duplicate);
+    } catch (error) {
+        parsed = error instanceof Error ? error : new Error(String(error));
+    }
+
+    assert.ok(
+        parsed !== null,
+        `the parser accepted a duplicate zone id that the builder rejects with "${built.message}": `
+        + 'the document loads and then cannot be saved',
+    );
+    assert.match(parsed.message, /duplicate zone id/);
+});

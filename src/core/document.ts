@@ -76,15 +76,8 @@ export function createDiagramDocument(input: DiagramDocumentInput = {}): Diagram
         return normalizeLink({ ...link, id }, `$.links[${index}]`);
     });
     const rawZones = mapElements(input.zones, '$.zones');
-    const usedZoneIds = new Set<string>();
-    const zones = rawZones.map((zone, index) => {
-        const normalized = normalizeZone(zone, `$.zones[${index}]`);
-        if (usedZoneIds.has(normalized.id)) {
-            throw new DiagramDocumentError(`duplicate zone id "${normalized.id}"`, `$.zones[${index}].id`);
-        }
-        usedZoneIds.add(normalized.id);
-        return normalized;
-    });
+    const zones = rawZones.map((zone, index) => normalizeZone(zone, `$.zones[${index}]`));
+    validateUniqueZones(zones);
 
     const document: DiagramDocument = {
         version: DIAGRAM_DOCUMENT_VERSION,
@@ -325,6 +318,21 @@ function parseEndpoint(value: unknown, path: string): DiagramDocumentEndpoint {
     };
 }
 
+/**
+ * Zone ids have to be unique wherever a document comes from. Keeping the check here, rather than
+ * inside createDiagramDocument alone, is what stops a file being loadable and unsaveable: the
+ * parser used to let a duplicate through and the very next saveDocument() -- which rebuilds
+ * through createDiagramDocument -- threw on it.
+ */
+function validateUniqueZones(zones: readonly DiagramDocumentZone[]): void {
+    const seen = new Set<string>();
+    for (let index = 0; index < zones.length; index++) {
+        const zone = zones[index];
+        if (seen.has(zone.id)) throw new DiagramDocumentError(`duplicate zone id "${zone.id}"`, `$.zones[${index}].id`);
+        seen.add(zone.id);
+    }
+}
+
 function validateDocument(document: DiagramDocument): void {
     const nodes = new Map<string, DiagramDocumentNode>();
     for (let index = 0; index < document.nodes.length; index++) {
@@ -356,6 +364,8 @@ function validateDocument(document: DiagramDocument): void {
         if (endpoints.has(key)) throw new DiagramDocumentError('duplicate link endpoints', path);
         endpoints.add(key);
     }
+
+    validateUniqueZones(document.zones);
 }
 
 function validateUniquePorts(ports: readonly DiagramDocumentPort[], path: string): void {
