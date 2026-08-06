@@ -593,6 +593,9 @@ export class Diagram {
 
     constructor(opts: DiagramOptions) {
         this.opts = opts;
+        // Same normalization setTypeColors applies, so a palette handed in at construction is
+        // keyed like one handed in later.
+        if (opts.typeColors !== undefined) this.setTypeColorsInternal(opts.typeColors);
         this.host = opts.host;
         this.gridSnapEnabled = opts.gridSnap ?? false;
         this.gridSize = this.normalizeGridSize(opts.gridSize ?? DEFAULT_GRID_SIZE);
@@ -1738,8 +1741,21 @@ export class Diagram {
         this.scheduleDraw();
     }
     setTypeColors(colors: Readonly<Record<string, string>>): void {
-        this.opts.typeColors = { ...colors };
+        this.setTypeColorsInternal(colors);
         this.scheduleDraw();
+    }
+
+    /**
+     * Keyed the way port types are compared everywhere else. Connection compatibility is case- and
+     * space-insensitive, so an imported scheme spelling a socket "candle " connects to "Candle" and
+     * then fell through to a hash colour, showing one logical type in two colours in one diagram.
+     */
+    private setTypeColorsInternal(colors: Readonly<Record<string, string>>): void {
+        const normalized: Record<string, string> = {};
+        for (const [type, color] of Object.entries(colors)) {
+            setJsonKey(normalized, normalizePortType(type), color);
+        }
+        this.opts.typeColors = normalized;
     }
     setTheme(t: {
         background?: string;
@@ -1851,7 +1867,8 @@ export class Diagram {
         const light = maxL !== undefined && maxL < 0.5;
         if (type === '') return light ? '#585c62' : '#9aa0a6';
         const map = this.opts.typeColors ?? {};
-        const base = map[type] ?? `hsl(${hashHue(type)}, 62%, 58%)`;
+        const normalized = normalizePortType(type);
+        const base = getJsonKey(map, normalized) ?? `hsl(${hashHue(normalized)}, 62%, 58%)`;
         return maxL !== undefined ? clampLightness(base, maxL) : base;
     }
     // Selection/hover accent. The dark-canvas blue washes out on a light canvas, so a light theme

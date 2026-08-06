@@ -3447,3 +3447,59 @@ test('load() rejects a duplicate node id the same way addDiagramNode and loadDoc
         + 'three behaviours, and the silent one loses a node',
     );
 });
+
+test('a port type that differs only in case still gets its catalog colour', async () => {
+    installDom();
+    const { DiagramNode, Link, Node, PortType, StockSharpCatalog: Catalog, StockSharpDiagram } =
+        await import('../src/index');
+
+    const catalog = new Catalog();
+    catalog.addPortType(new PortType({ name: 'Candle', color: '#00e0a4' }));
+    catalog.addNodeType(new Node({ id: 'source-type', name: 'Source' }));
+
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog,
+    });
+    // What an imported foreign scheme looks like: the same socket type, spelled the way that file
+    // spelled it.
+    diagram.load([
+        new DiagramNode({
+            id: 'imported', typeId: 'source-type', name: 'Imported', x: 0, y: 0,
+            outPorts: [{ id: 'out', name: 'Out', type: 'candle' }],
+        }),
+        new DiagramNode({
+            id: 'native', typeId: 'source-type', name: 'Native', x: 300, y: 0,
+            inPorts: [{ id: 'in', name: 'In', type: 'Candle' }],
+        }),
+    ], []);
+
+    // The premise: the engine already treats the two spellings as one type.
+    assert.equal(
+        diagram.addLink(new Link({ outNode: 'imported', outPort: 'out', inNode: 'native', inPort: 'in' })),
+        true,
+        'linking candle -> Candle was refused, so the case-insensitive half of the finding does not hold',
+    );
+
+    // Only the imported node from here on: with a correctly cased port on screen the catalog
+    // colour would show up in the drawing no matter how the imported one was painted.
+    diagram.load([
+        new DiagramNode({
+            id: 'imported', typeId: 'source-type', name: 'Imported', x: 0, y: 0,
+            outPorts: [{ id: 'out', name: 'Out', type: 'candle' }],
+        }),
+    ], []);
+
+    const shot = diagram.takeScreenshot({ scope: 'content', pixelRatio: 1 }) as unknown as {
+        fillStyles: string[];
+    };
+    const hashed = shot.fillStyles.filter((value) => value.startsWith('hsl('));
+
+    assert.ok(
+        shot.fillStyles.includes('#00e0a4'),
+        `a port typed "candle" was painted with a generated colour (${hashed.join(', ') || 'none'}) instead of #00e0a4, the catalog colour of "Candle"`,
+    );
+
+    diagram.destroy();
+});
