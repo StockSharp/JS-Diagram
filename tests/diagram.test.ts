@@ -3307,3 +3307,38 @@ test('undoStackChanged from a history change reports the permission-gated canUnd
         + 'here means a toolbar enables an Undo button that undo() will refuse.',
     );
 });
+
+test('a pinch cancels an overview drag and a link snap along with the other gestures', () => {
+    const { diagram, host } = makeDiagram();
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+    }));
+
+    // Private state: the gesture reset is internal, and its whole point is that no public call
+    // can observe a half-cancelled gesture.
+    const internals = diagram as unknown as { ovDragging: boolean; linkSnap: unknown };
+    internals.ovDragging = true;
+    internals.linkSnap = { node: 'a', port: 'out' };
+
+    // A second finger lands: the handler cancels drag, pan, rubber-band, linking and relinking.
+    host.canvas?.dispatch('touchstart', {
+        touches: [
+            { clientX: 100, clientY: 100 },
+            { clientX: 200, clientY: 180 },
+        ],
+    });
+
+    assert.equal(
+        internals.ovDragging,
+        false,
+        'a finger that started on the minimap keeps panning the viewport through the pinch',
+    );
+    assert.equal(
+        internals.linkSnap,
+        null,
+        'the cancelled link gesture left its snap highlight on screen',
+    );
+});

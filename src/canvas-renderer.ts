@@ -2611,6 +2611,10 @@ export class Diagram {
                 this.dragNode = null; this.dragStart = [];
                 this.panning = false; this.rubber = null; this.linking = null;
                 this.relinking = null; this.relinkCandidate = null;
+                // The two the block used to miss: a finger that started on the minimap kept
+                // panning the viewport against the pinch, and a cancelled wire drag left its
+                // magnet highlight burned onto a socket until something else redrew it.
+                this.ovDragging = false; this.linkSnap = null;
             }
         }, { passive: false });
         this.listen(this.canvas, 'touchmove', (e) => {
