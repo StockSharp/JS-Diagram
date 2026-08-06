@@ -291,6 +291,17 @@ export class ContextMenuView {
         this.submenu = null;
     }
 
+    /**
+     * The window the menu actually lives in. A component created from one document and mounted
+     * into another -- a same-origin iframe, a popup -- must be measured and dismissed against
+     * that document's window, not the one this module happened to be evaluated in.
+     */
+    private get view(): (Window & typeof globalThis) | null {
+        const owner = this.container.ownerDocument ?? (typeof document === 'undefined' ? null : document);
+        const view = owner?.defaultView ?? (typeof window === 'undefined' ? null : window);
+        return view ?? null;
+    }
+
     // Reads the resolved writing direction so the submenu's side and its arrow agree with it.
     private rtl(): boolean {
         if (typeof getComputedStyle !== 'function') return false;
@@ -304,13 +315,14 @@ export class ContextMenuView {
 
     /** Keeps the panel inside the viewport, flipping it left when it would run off the edge. */
     private keepOnScreen(panel: HTMLElement): void {
-        if (typeof panel.getBoundingClientRect !== 'function' || typeof window === 'undefined') return;
+        const view = this.view;
+        if (typeof panel.getBoundingClientRect !== 'function' || view === null) return;
         const box = panel.getBoundingClientRect();
-        if (box.right > window.innerWidth - 4 || box.left < 4) {
+        if (box.right > view.innerWidth - 4 || box.left < 4) {
             panel.style.insetInlineStart = 'auto';
             panel.style.insetInlineEnd = '100%';
         }
-        if (box.bottom > window.innerHeight - 4) {
+        if (box.bottom > view.innerHeight - 4) {
             panel.style.top = 'auto';
             panel.style.bottom = '-5px';
         }
@@ -319,12 +331,13 @@ export class ContextMenuView {
     private place(root: HTMLElement, x: number, y: number): void {
         root.style.left = `${x}px`;
         root.style.top = `${y}px`;
-        if (typeof root.getBoundingClientRect !== 'function' || typeof window === 'undefined') return;
+        const view = this.view;
+        if (typeof root.getBoundingClientRect !== 'function' || view === null) return;
         const box = root.getBoundingClientRect();
         // Flip rather than clamp: a menu shoved back onto the screen would cover the very
         // thing that was right-clicked.
-        if (box.right > window.innerWidth - 4) root.style.left = `${Math.max(4, x - box.width)}px`;
-        if (box.bottom > window.innerHeight - 4) root.style.top = `${Math.max(4, y - box.height)}px`;
+        if (box.right > view.innerWidth - 4) root.style.left = `${Math.max(4, x - box.width)}px`;
+        if (box.bottom > view.innerHeight - 4) root.style.top = `${Math.max(4, y - box.height)}px`;
     }
 
     private watchForDismissal(owner: Document): void {
@@ -341,12 +354,13 @@ export class ContextMenuView {
         this.on(owner, 'keydown', (event: Event) => {
             if ((event as KeyboardEvent).key === 'Escape') this.hide();
         });
-        if (typeof window !== 'undefined') {
+        const view = this.view;
+        if (view !== null) {
             // Scroll and resize move the diagram out from under the menu, which would otherwise
             // hang in place pointing at nothing.
-            this.on(window, 'blur', dismiss);
-            this.on(window, 'resize', dismiss);
-            this.on(window, 'scroll', dismiss, true);
+            this.on(view, 'blur', dismiss);
+            this.on(view, 'resize', dismiss);
+            this.on(view, 'scroll', dismiss, true);
         }
     }
 

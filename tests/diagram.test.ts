@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { Diagram, version, type DiagramNodeInit } from '../src/canvas-renderer';
 import { createDiagramDocument } from '../src/core/document';
+import { ContextMenuView } from '../src/diagram/context-menu';
 import { serializeDiagramViewState } from '../src/core/view-state';
 import type { ContextMenuItemState } from '../src/diagram/api';
 
@@ -2978,4 +2979,84 @@ test('takeSvg constrains a zone caption to the maxWidth the renderer passes to f
         + 'the zone it names, while the canvas export of the same diagram keeps it inside');
     assert.ok(Number(textLength[1]) <= maxWidth,
         `the exported caption must fit the ${maxWidth}px the renderer allowed, got textLength=${textLength[1]}`);
+});
+
+class MenuElement {
+    readonly style: Record<string, string> = {};
+    readonly children: MenuElement[] = [];
+    className = '';
+    type = '';
+    disabled = false;
+    textContent = '';
+    width = 176;
+    height = 120;
+    private readonly attributes = new Map<string, string>();
+    private readonly listeners = new Map<string, EventListener[]>();
+
+    constructor(readonly tagName: string) {}
+
+    setAttribute(name: string, value: string): void { this.attributes.set(name, value); }
+    getAttribute(name: string): string | null { return this.attributes.get(name) ?? null; }
+    appendChild<T extends MenuElement>(child: T): T {
+        this.children.push(child);
+        return child;
+    }
+    contains(node: unknown): boolean {
+        return node === this || this.children.some((child) => child.contains(node));
+    }
+    remove(): void {}
+    addEventListener(type: string, listener: EventListener): void {
+        const handlers = this.listeners.get(type) ?? [];
+        handlers.push(listener);
+        this.listeners.set(type, handlers);
+    }
+    removeEventListener(type: string, listener: EventListener): void {
+        this.listeners.set(type, (this.listeners.get(type) ?? []).filter((handler) => handler !== listener));
+    }
+    getBoundingClientRect(): DOMRect {
+        const left = Number.parseFloat(this.style.left ?? '') || 0;
+        const top = Number.parseFloat(this.style.top ?? '') || 0;
+        return {
+            left, top, right: left + this.width, bottom: top + this.height,
+            width: this.width, height: this.height, x: left, y: top, toJSON: () => ({}),
+        };
+    }
+}
+
+test('a menu mounted in another document is clamped to that document viewport', () => {
+    const globalWindow = installDom() as FakeWindow & { innerWidth: number; innerHeight: number };
+    // The page around the iframe is roomy; the iframe is not. Only reading the wrong window makes
+    // the menu below appear to fit.
+    globalWindow.innerWidth = 1600;
+    globalWindow.innerHeight = 900;
+
+    const ownerWindow = Object.assign(new FakeWindow(), { innerWidth: 320, innerHeight: 240 });
+    const ownerDocument = Object.assign(new FakeElement(), {
+        defaultView: ownerWindow,
+        createElement: (tag: string) => new MenuElement(tag),
+    });
+    const container = Object.assign(new FakeElement(), { ownerDocument });
+
+    const view = new ContextMenuView({
+        container: container as unknown as HTMLElement,
+        execute: () => undefined,
+    });
+    // Bottom-right of the iframe: a 176x120 panel dropped here runs off both of its edges.
+    view.show(200, 200, [{ command: 'copy', enabled: true }]);
+
+    const root = container.children[0] as unknown as MenuElement;
+    assert.equal(root?.className, 'ssdiagram-context-menu',
+        'the menu panel was not mounted into the container, so this test is not exercising the finding');
+
+    assert.equal(root.style.left, '24px',
+        'the menu was clamped against the top-level window (1600px) instead of the iframe it is drawn in (320px), so it hangs off the right edge');
+    assert.equal(root.style.top, '80px',
+        'the menu was clamped against the top-level window (900px) instead of the iframe it is drawn in (240px), so it hangs off the bottom edge');
+
+    assert.equal(ownerWindow.listenerCount(), 3,
+        'blur/resize/scroll were not attached to the iframe view, so scrolling or resizing the iframe leaves the menu hanging in place');
+    assert.equal(globalWindow.listenerCount(), 0,
+        'the menu subscribed to the top-level window, which is not the one it lives in');
+
+    view.destroy();
 });
