@@ -1,5 +1,25 @@
 import { toPortDynamicMode } from '../core/model.js';
-import type { JsonObject, PortDynamicMode } from '../core/model.js';
+import { setJsonKey } from '../core/json.js';
+import type { JsonObject, JsonValue, PortDynamicMode } from '../core/model.js';
+
+/**
+ * Metadata handed to a public object is copied, never aliased. Event payloads are built from the
+ * live model, and a host writing its own note onto payload.link.metadata was reaching straight
+ * into that model -- past transactions and past history, so the write turned up in the next saved
+ * document and an undo/redo of the link silently reverted it.
+ */
+function copyJsonValue(value: JsonValue): JsonValue {
+    if (Array.isArray(value)) return value.map(copyJsonValue);
+    if (value !== null && typeof value === 'object') return copyJsonObject(value);
+    return value;
+}
+
+function copyJsonObject(value: JsonObject | undefined): JsonObject {
+    if (value === undefined) return {};
+    const result: JsonObject = {};
+    for (const [key, item] of Object.entries(value)) setJsonKey(result, key, copyJsonValue(item));
+    return result;
+}
 
 // Core data model — node/port catalog (palette) and the live diagram (DiagramNode + Link).
 
@@ -247,7 +267,7 @@ export class Link {
         this.outPort = init.outPort;
         this.inNode = init.inNode;
         this.inPort = init.inPort;
-        this.metadata = init.metadata ?? {};
+        this.metadata = copyJsonObject(init.metadata);
     }
 }
 

@@ -3126,3 +3126,57 @@ test('public save() keeps link id and metadata instead of blanking them', async 
         + ' selectLink(payload.link.id) with an empty id clears the selection instead of selecting the link',
     );
 });
+
+test('link event payloads carry a metadata copy, so a host write cannot reach the model', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const { createDiagramDocument } = await import('../src/core/document');
+
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'source', name: 'Source', x: 10, y: 20, outPorts: [{ id: 'out', name: 'Value', type: 'number' }] },
+            { id: 'sink', name: 'Sink', x: 300, y: 20, inPorts: [{ id: 'in', name: 'Value', type: 'number' }] },
+        ],
+        links: [{
+            id: 'link-alpha',
+            from: { nodeId: 'source', portId: 'out' },
+            to: { nodeId: 'sink', portId: 'in' },
+            metadata: { label: 'original' },
+        }],
+    }));
+
+    let payloadMetadata: Record<string, unknown> | null = null;
+    diagram.on('linkSelected', ({ link, selected }) => {
+        if (selected) payloadMetadata = link.metadata as Record<string, unknown>;
+    });
+
+    diagram.selectLink('link-alpha');
+    assert.notEqual(payloadMetadata, null, 'linkSelected never fired, so the payload could not be inspected');
+
+    // Compared through a spread copy so the guard does not narrow the reference the host writes to.
+    const metadata = payloadMetadata as unknown as Record<string, unknown>;
+    assert.deepEqual(
+        { ...metadata },
+        { label: 'original' },
+        'the linkSelected payload did not carry the link metadata, so this test could prove nothing about aliasing',
+    );
+
+    // The most ordinary thing a host does with a payload: stash its own bookkeeping on it.
+    metadata.label = 'host scribble';
+    metadata.touchedAt = 1;
+
+    const persisted = diagram.saveDocument().links[0].metadata as Record<string, unknown>;
+    assert.deepEqual(
+        persisted,
+        { label: 'original' },
+        'writing to the linkSelected payload metadata mutated the model: saveDocument() now reports'
+        + ` ${JSON.stringify(persisted)} instead of { label: "original" }, a change made behind transactions`
+        + ' and history',
+    );
+});
