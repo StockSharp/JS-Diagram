@@ -949,6 +949,10 @@ export class Diagram {
     }
     clear(): void {
         this.nodes = []; this.links = [];
+        // Zones belong to the document like everything else here. Leaving them behind meant a
+        // discarded strategy kept drawing its zones over the next one and, worse, saveDocument()
+        // wrote them into that unrelated strategy's file.
+        this.zones = [];
         this.selectedNode = null; this.selectedNodes.clear(); this.selectedLink = null; this.selectedPort = null;
         this.documentMetadata = {};
         this.runtimeState = createDiagramRuntimeState();

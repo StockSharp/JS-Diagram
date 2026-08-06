@@ -2507,6 +2507,51 @@ test('zones survive loading a document and saving it back', () => {
     }]);
 });
 
+function documentWithZone(): ReturnType<typeof createDiagramDocument> {
+    return createDiagramDocument({
+        nodes: [{ id: 'a', name: 'A' }],
+        zones: [{ id: 'colo', name: 'Colocation', x: -20, y: -20, width: 400, height: 260, color: '#d8c79a' }],
+    });
+}
+
+// Zones are only ever assigned by loadDocument(); clear() resets nodes, links, selection,
+// metadata, runtime state and history but not zones, and the legacy load(nodes, links) path goes
+// through the same clear(). So the zones of a document that was thrown away keep being drawn and,
+// worse, are written into every later saveDocument().
+test('clear() and load() drop the zones of the previous document instead of writing them into the next saveDocument()', async () => {
+    const { diagram } = makeDiagram();
+
+    diagram.loadDocument(documentWithZone());
+    diagram.clear();
+    const afterClear = diagram.saveDocument().zones.map((zone) => zone.id);
+
+    diagram.loadDocument(documentWithZone());
+    diagram.load([source, sink], []);
+    const afterLegacyLoad = diagram.saveDocument().zones.map((zone) => zone.id);
+
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const facade = new StockSharpDiagram({
+        div: new FakeHost() as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    facade.loadDocument(documentWithZone());
+    facade.clear();
+    const afterFacadeClear = facade.saveDocument().zones.map((zone) => zone.id);
+
+    facade.loadDocument(documentWithZone());
+    facade.load([], []);
+    const afterFacadeLoad = facade.saveDocument().zones.map((zone) => zone.id);
+
+    assert.deepEqual(
+        { afterClear, afterLegacyLoad, afterFacadeClear, afterFacadeLoad },
+        { afterClear: [], afterLegacyLoad: [], afterFacadeClear: [], afterFacadeLoad: [] },
+        'every zone id listed above belongs to a document that was already discarded: it survived clear()/load() '
+        + 'and was persisted by the next saveDocument() into an unrelated strategy',
+    );
+});
+
 test('loading a document without zones clears the ones already on the canvas', () => {
     const { diagram } = makeDiagram();
 
