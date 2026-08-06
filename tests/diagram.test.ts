@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { Diagram, version, type DiagramNodeInit } from '../src/canvas-renderer';
-import { createDiagramDocument } from '../src/core/document';
+import { createDiagramDocument, serializeDiagramDocument } from '../src/core/document';
 import { ContextMenuView } from '../src/diagram/context-menu';
 import { serializeDiagramViewState } from '../src/core/view-state';
 import type { ContextMenuItemState } from '../src/diagram/api';
@@ -1001,6 +1001,16 @@ const ERROR_FLASH_MS = 1100;
 
 const THEME_BACKGROUND = '#102030';
 const EXPORT_BACKGROUND = '#abcdef';
+
+/** Runs fn and hands back whatever it threw, so a failure message can quote it. */
+function capture(fn: () => unknown): Error | null {
+    try {
+        fn();
+        return null;
+    } catch (error) {
+        return error instanceof Error ? error : new Error(String(error));
+    }
+}
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); });
 
@@ -3405,4 +3415,35 @@ test('an export leaves the minimap geometry describing the on-screen minimap', (
         'the export left the minimap geometry in export coordinates: takeScreenshot restores nine view fields '
         + 'in its finally block but not ovGeo, and schedules no repaint, so hit-testing the minimap afterwards '
         + 'maps clicks through the export frame instead of the visible one and pans the viewport to the wrong place');
+});
+
+test('load() rejects a duplicate node id the same way addDiagramNode and loadDocument do', () => {
+    const first: DiagramNodeInit = { id: 'dup', name: 'First', x: 0, y: 0 };
+    const second: DiagramNodeInit = { id: 'dup', name: 'Second', x: 200, y: 0 };
+
+    const { diagram } = makeDiagram();
+
+    diagram.addDiagramNode(first);
+    const addError = capture(() => diagram.addDiagramNode(second));
+
+    // A duplicate-id document cannot be built with createDiagramDocument (it validates), so the
+    // duplicate is injected into the serialized form the parser reads.
+    const root = JSON.parse(serializeDiagramDocument(createDiagramDocument({
+        nodes: [{ id: 'dup', name: 'First' }],
+    }))) as { nodes: Record<string, unknown>[] };
+    root.nodes.push({ ...root.nodes[0], name: 'Second' });
+    const documentError = capture(() => { diagram.loadDocument(JSON.stringify(root)); });
+
+    const loadError = capture(() => { diagram.load([first, second], []); });
+    const survivors = diagram.save().nodes.map((node) => node.name);
+
+    assert.ok(addError !== null, 'baseline broken: addDiagramNode must reject a duplicate node id');
+    assert.ok(documentError !== null, 'baseline broken: loadDocument must reject a duplicate node id');
+    assert.ok(
+        loadError !== null,
+        'load() accepted two nodes with id "dup" and silently kept only '
+        + `${JSON.stringify(survivors)}, while the same duplicate makes addDiagramNode throw `
+        + `("${addError.message}") and loadDocument throw ("${documentError.message}") - three entry points, `
+        + 'three behaviours, and the silent one loses a node',
+    );
 });

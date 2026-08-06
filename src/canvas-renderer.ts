@@ -1221,6 +1221,25 @@ export class Diagram {
         // Initial load is "model seed" — should NOT be undoable, and
         // shouldn't leave the user with 12 entries to Ctrl+Z through
         // before their stack reaches their first real action.
+        // Validate before applying anything. doAddNode returns silently on a duplicate id, so a
+        // second node with the same id simply vanished and every wire meant for it attached to the
+        // first -- a quietly miswired strategy. The link check used to sit mid-loop, which threw
+        // with the diagram already half loaded and no loadFinished.
+        const seenNodeIds = new Set<string>();
+        for (const node of nodes) {
+            const id = node.id ?? '';
+            if (id === '') continue;
+            if (seenNodeIds.has(id)) throw new Error(`ssdiagram: duplicate node id "${id}"`);
+            seenNodeIds.add(id);
+        }
+        const seenLinkIds = new Set<string>();
+        for (const link of links) {
+            const id = link.id ?? '';
+            if (id === '') continue;
+            if (seenLinkIds.has(id)) throw new Error(`ssdiagram: duplicate link id "${id}"`);
+            seenLinkIds.add(id);
+        }
+
         for (const node of nodes) {
             const id = node.id ?? this.nextNodeId();
             this.doAddNode({ ...node, id });
