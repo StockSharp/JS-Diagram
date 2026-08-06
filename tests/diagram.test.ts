@@ -2951,3 +2951,31 @@ test('takeScreenshot() with no options copies a frame that shows the current mod
         + 'from before load(), so the returned canvas shows stale content (empty, right after construction) '
         + 'while takeScreenshot({includeGrid:true}) of the same diagram is up to date');
 });
+
+test('takeSvg constrains a zone caption to the maxWidth the renderer passes to fillText', () => {
+    const { diagram } = makeDiagram();
+    // 31 characters -> 217px through the harness metrics (7px per character), against a zone that
+    // only offers width - 24 = 96px. The canvas backend squeezes it; the SVG backend must too.
+    const caption = 'Colocation cluster in Frankfurt';
+    const zoneWidth = 120;
+    const maxWidth = zoneWidth - 24;
+
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [{ id: 'a', name: 'A', x: 0, y: 0 }],
+        zones: [{ id: 'z', name: caption, x: 0, y: 0, width: zoneWidth, height: 90 }],
+    }));
+
+    const svg = diagram.takeSvg();
+    const element = new RegExp(`<text[^>]*>${caption}</text>`).exec(svg);
+
+    assert.ok(element !== null, `setup: the zone caption should be somewhere in the export, got: ${svg.slice(0, 400)}`);
+
+    const textLength = /textLength="([\d.]+)"/.exec(element[0]);
+    assert.ok(textLength !== null,
+        'SvgSurface.fillText(text, x, y) drops the fourth argument DrawSurface declares and drawZones passes '
+        + `(maxWidth=${maxWidth}), so the exported <text> carries nothing that limits its width: `
+        + `${element[0]} -- at ${caption.length * 7}px the caption runs ${caption.length * 7 - maxWidth}px past `
+        + 'the zone it names, while the canvas export of the same diagram keeps it inside');
+    assert.ok(Number(textLength[1]) <= maxWidth,
+        `the exported caption must fit the ${maxWidth}px the renderer allowed, got textLength=${textLength[1]}`);
+});

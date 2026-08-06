@@ -1736,7 +1736,7 @@ export declare class SvgSurface implements DrawSurface {
     clearRect(x: number, y: number, w: number, h: number): void;
     fillRect(x: number, y: number, w: number, h: number): void;
     strokeRect(x: number, y: number, w: number, h: number): void;
-    fillText(text: string, x: number, y: number): void;
+    fillText(text: string, x: number, y: number, maxWidth?: number): void;
     measureText(text: string): {
         width: number;
     };

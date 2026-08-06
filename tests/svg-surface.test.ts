@@ -202,3 +202,23 @@ test('measureText falls back to an estimate rather than zero when no context is 
     const width = s.measureText('GateMD').width;
     assert.ok(width > 0, 'a zero width would stack every label at one point');
 });
+
+test('fillText honours maxWidth, and only when the text would overflow', () => {
+    const tight = surface();
+    tight.font = '12px sans-serif';
+    tight.fillText('a caption far wider than its box', 10, 20, 40);
+    const constrained = tight.toSvg();
+    assert.match(constrained, /textLength="40"/, 'canvas squeezes text to maxWidth; the SVG must say so');
+    assert.match(constrained, /lengthAdjust="spacingAndGlyphs"/);
+
+    // Text that already fits must not be stretched to the limit.
+    const loose = surface();
+    loose.font = '12px sans-serif';
+    loose.fillText('ok', 10, 20, 400);
+    assert.doesNotMatch(loose.toSvg(), /textLength=/);
+
+    // No limit given: unchanged behaviour.
+    const plain = surface();
+    plain.fillText('ok', 10, 20);
+    assert.doesNotMatch(plain.toSvg(), /textLength=/);
+});

@@ -333,17 +333,26 @@ export class SvgSurface implements DrawSurface {
 
     // ===== text ==========================================================
 
-    fillText(text: string, x: number, y: number): void {
+    fillText(text: string, x: number, y: number, maxWidth?: number): void {
         if (text === '') return;
 
         const anchor = ANCHOR[this.state.textAlign] ?? 'start';
         const baseline = BASELINE[this.state.textBaseline] ?? 'alphabetic';
 
+        // Canvas squeezes the glyphs to fit maxWidth; SVG needs to be told, and only when the text
+        // would actually overflow -- textLength on text that already fits would stretch it.
+        // Dropping the argument left node titles and zone captions running past the box the
+        // renderer had sized for them, so the vector export disagreed with the raster one.
+        let constraint = '';
+        if (maxWidth !== undefined && maxWidth > 0 && this.measureText(text).width > maxWidth) {
+            constraint = ` textLength="${n(maxWidth)}" lengthAdjust="spacingAndGlyphs"`;
+        }
+
         // The canvas font string is CSS font shorthand, so it transfers verbatim -- no parsing, and
         // no chance of losing the weight or the fallback list on the way.
         this.emit(
             `<text x="${n(x)}" y="${n(y)}" style="font:${escapeXml(this.state.font)}" ` +
-            `text-anchor="${anchor}" dominant-baseline="${baseline}" ${this.fillAttrs()}>` +
+            `text-anchor="${anchor}" dominant-baseline="${baseline}"${constraint} ${this.fillAttrs()}>` +
             `${escapeXml(text)}</text>`);
     }
 
