@@ -990,6 +990,10 @@ test('opening the context menu drops the hover under it, tooltip and all', () =>
     assert.deepEqual(hovers, [true, false], 'the hover survived the menu opening');
 });
 
+/** Theme background of a diagram under test, deliberately distinct from any export override. */
+const THEME_BACKGROUND = '#102030';
+const EXPORT_BACKGROUND = '#abcdef';
+
 const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); });
 
 const mouse = (clientX: number, clientY: number, button: number): Record<string, unknown> => ({
@@ -2888,4 +2892,35 @@ test('a double click on a link leaves the viewport untouched', () => {
         'a double click on a link must not re-fit the view: dblclick treated the link as empty '
         + 'space and ran zoomToFit(), rewriting the zoom and pan the user had set',
     );
+});
+
+test('takeSvg paints the requested export background instead of the live theme one', () => {
+    installDom();
+    const host = new FakeHost();
+    const diagram = new Diagram({
+        host: host as unknown as HTMLElement,
+        background: THEME_BACKGROUND,
+    });
+    diagram.load([source, sink], [{ from: 'source', fromPort: 'out', to: 'sink', toPort: 'in' }]);
+
+    // The raster export is the reference implementation: it swaps opts.background for the duration
+    // of the draw, so the theme colour never reaches the output.
+    const raster = diagram.takeScreenshot({ background: EXPORT_BACKGROUND }) as unknown as FakeCanvas;
+    assert.ok(raster.fillStyles.includes(EXPORT_BACKGROUND),
+        `reference: takeScreenshot({background}) must fill with ${EXPORT_BACKGROUND}, painted ${JSON.stringify(raster.fillStyles.slice(0, 4))}`);
+    assert.ok(!raster.fillStyles.includes(THEME_BACKGROUND),
+        `reference: takeScreenshot({background}) must not fall back to the theme colour ${THEME_BACKGROUND}`);
+
+    const svg = diagram.takeSvg({ background: EXPORT_BACKGROUND });
+    // The underlay SvgSurface writes first, then the frame-sized rect draw() paints on top of it.
+    const underlay = /<rect width="100%" height="100%" fill="([^"]+)"\/>/.exec(svg);
+    const frame = /<rect x="0" y="0" width="800" height="480" fill="([^"]+)"/.exec(svg);
+
+    assert.ok(underlay !== null && frame !== null,
+        `setup: the export should have both an underlay and the frame draw() fills, got: ${svg.slice(0, 300)}`);
+    assert.equal(frame[1], EXPORT_BACKGROUND,
+        `takeSvg({background}) repainted the live theme background over the requested export background: the `
+        + `option reaches only the SvgSurface underlay (${underlay[1]}), and draw() then covers the whole frame `
+        + `with an opaque rect of the theme colour -- so raster and vector exports of the same options come out `
+        + 'different colours');
 });

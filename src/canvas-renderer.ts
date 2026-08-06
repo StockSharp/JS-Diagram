@@ -1478,10 +1478,16 @@ export class Diagram {
             offX: this.offX,
             offY: this.offY,
             overviewVisible: this.overviewVisible,
+            background: this.opts.background,
         };
 
         try {
             this.ctx = surface;
+            // draw() fills the frame with the theme background unconditionally, straight over the
+            // backdrop the surface was given -- so passing the override to SvgSurface alone left it
+            // invisible and the SVG disagreed with the PNG of the same options. takeScreenshot
+            // swaps the theme value for the duration of the export; this does the same.
+            if (options.background !== undefined) this.opts.background = options.background;
             this.width = width;
             this.height = height;
             // 1: an SVG has no device pixels to multiply by, and the viewBox carries the size.
@@ -1507,6 +1513,7 @@ export class Diagram {
             this.offX = previous.offX;
             this.offY = previous.offY;
             this.overviewVisible = previous.overviewVisible;
+            this.opts.background = previous.background;
         }
 
         return surface.toSvg();
