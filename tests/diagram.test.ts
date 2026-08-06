@@ -244,8 +244,10 @@ test('load/save preserves the public graph model', () => {
 
     const saved = diagram.save();
     assert.equal(saved.nodes.length, 2);
+    // Endpoints plus the identity a caller needs to address the link again: dropping id, style
+    // and metadata here is what made save()/load() lossy.
     assert.deepEqual(saved.links, [
-        { from: 'source', fromPort: 'out', to: 'sink', toPort: 'in' },
+        { id: 'link_1', from: 'source', fromPort: 'out', to: 'sink', toPort: 'in', style: 'solid', metadata: {} },
     ]);
     assert.equal(saved.nodes[0].outPorts[0].type, 'number');
 });
@@ -1920,7 +1922,10 @@ test('high-level load/save preserves the complete Designer node contract', async
     const saved = diagram.save();
     assert.equal(saved.nodes.length, 1);
     assert.deepEqual(saved.nodes[0], node);
+    // The id the control generated, not an empty one: a link a host cannot address again is
+    // not a preserved link.
     assert.deepEqual(saved.links[0], new Link({
+        id: 'link_1',
         outNode: 'indicator-1',
         outPort: 'result',
         inNode: 'indicator-1',
@@ -3059,4 +3064,65 @@ test('a menu mounted in another document is clamped to that document viewport', 
         'the menu subscribed to the top-level window, which is not the one it lives in');
 
     view.destroy();
+});
+
+test('public save() keeps link id and metadata instead of blanking them', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const { createDiagramDocument } = await import('../src/core/document');
+
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+
+    const document = createDiagramDocument({
+        nodes: [
+            { id: 'source', name: 'Source', x: 10, y: 20, outPorts: [{ id: 'out', name: 'Value', type: 'number' }] },
+            { id: 'sink', name: 'Sink', x: 300, y: 20, inPorts: [{ id: 'in', name: 'Value', type: 'number' }] },
+        ],
+        links: [{
+            id: 'link-alpha',
+            from: { nodeId: 'source', portId: 'out' },
+            to: { nodeId: 'sink', portId: 'in' },
+            metadata: { label: 'main feed' },
+        }],
+    });
+
+    const loadFinishedIds: string[] = [];
+    diagram.on('loadFinished', ({ links }) => {
+        for (const link of links) loadFinishedIds.push(link.id);
+    });
+
+    diagram.loadDocument(document);
+
+    // saveDocument() is the reference reading: same model, the other accessor.
+    assert.equal(
+        diagram.saveDocument().links[0].id,
+        'link-alpha',
+        'the document round-trip lost the link id, so this test could prove nothing about save()',
+    );
+
+    const saved = diagram.save();
+    assert.equal(saved.links.length, 1, 'save() must return the single loaded link');
+    assert.equal(
+        saved.links[0].id,
+        'link-alpha',
+        `save() dropped the link identity: id is ${JSON.stringify(saved.links[0].id)} instead of "link-alpha",`
+        + ' so save()/load() cannot round-trip a link and selectLink(link.id) matches nothing',
+    );
+    assert.deepEqual(
+        saved.links[0].metadata,
+        { label: 'main feed' },
+        `save() dropped the link metadata: got ${JSON.stringify(saved.links[0].metadata)} instead of`
+        + ' { label: "main feed" }, so host data attached to a link is lost by save()/load()',
+    );
+
+    assert.deepEqual(
+        loadFinishedIds,
+        ['link-alpha'],
+        `the loadFinished payload carried link ids ${JSON.stringify(loadFinishedIds)}; a host calling`
+        + ' selectLink(payload.link.id) with an empty id clears the selection instead of selecting the link',
+    );
 });

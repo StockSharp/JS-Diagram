@@ -58,7 +58,7 @@ export type DiagramNodeSnapshot = DiagramNodeInit & Required<Pick<DiagramNodeIni
 };
 export interface DiagramSnapshot {
     nodes: DiagramNodeSnapshot[];
-    links: Array<Required<Pick<LinkInit, 'from' | 'fromPort' | 'to' | 'toPort'>>>;
+    links: Array<Required<Pick<LinkInit, 'id' | 'from' | 'fromPort' | 'to' | 'toPort' | 'style'>> & Pick<LinkInit, 'metadata'>>;
 }
 export interface DiagramOptions {
     host: HTMLElement;
@@ -1014,6 +1014,11 @@ export declare class ContextMenuView {
     show(x: number, y: number, items: readonly ContextMenuItemState[]): void;
     hide(): void;
     destroy(): void;
+    /**
+     * The window the menu actually lives in. A component created from one document and mounted
+     * into another -- a same-origin iframe, a popup -- must be measured and dismissed against
+     * that document's window, not the one this module happened to be evaluated in.
+     */
     /** Keeps the panel inside the viewport, flipping it left when it would run off the edge. */
 }
 

@@ -98,7 +98,10 @@ export type DiagramNodeSnapshot = DiagramNodeInit
 
 export interface DiagramSnapshot {
     nodes: DiagramNodeSnapshot[];
-    links: Array<Required<Pick<LinkInit, 'from' | 'fromPort' | 'to' | 'toPort'>>>;
+    // Endpoints alone made the snapshot lossy: a save()/load() round-trip dropped every link's
+    // identity, style and metadata, and the links carried in loadFinished / undoRequested /
+    // redoRequested arrived with an empty id, so selectLink(payload.link.id) matched nothing.
+    links: Array<Required<Pick<LinkInit, 'id' | 'from' | 'fromPort' | 'to' | 'toPort' | 'style'>> & Pick<LinkInit, 'metadata'>>;
 }
 
 export interface DiagramOptions {
@@ -1242,7 +1245,15 @@ export class Diagram {
     save(): DiagramSnapshot {
         return {
             nodes: this.nodes.map((node) => node.toInit(false) as DiagramNodeSnapshot),
-            links: this.links.map((l) => ({ from: l.from, fromPort: l.fromPort, to: l.to, toPort: l.toPort })),
+            links: this.links.map((l) => ({
+                id: l.id,
+                from: l.from,
+                fromPort: l.fromPort,
+                to: l.to,
+                toPort: l.toPort,
+                style: l.style,
+                metadata: copyJsonObject(l.metadata),
+            })),
         };
     }
 
