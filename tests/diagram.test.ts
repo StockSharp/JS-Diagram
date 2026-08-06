@@ -990,6 +990,8 @@ test('opening the context menu drops the hover under it, tooltip and all', () =>
     assert.deepEqual(hovers, [true, false], 'the hover survived the menu opening');
 });
 
+const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms); });
+
 const mouse = (clientX: number, clientY: number, button: number): Record<string, unknown> => ({
     clientX, clientY, button, pointerId: 1, pointerType: 'mouse',
     shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
@@ -2795,5 +2797,31 @@ test('a plain click on a node emits no nodeMoved event', () => {
         'a click that displaces nothing must not report a move: nodeMoved fired for a node that '
         + 'stayed at its exact coordinates, so host dirty-tracking marks the document changed on '
         + 'every selection click',
+    );
+});
+
+test('holding the left mouse button opens no context menu and keeps the drag undoable', async () => {
+    const { diagram, host, fakeWindow } = makeDiagram();
+    diagram.load([source, sink], []);
+
+    const node = diagram.findNode('source')!;
+    const start = { x: node.x, y: node.y };
+    const [vx, vy] = diagram.worldToView(node.x + node.w / 2, node.y + node.h / 2);
+
+    const menus: Array<{ x: number; y: number }> = [];
+    diagram.on('contextMenu', (payload) => { menus.push({ x: payload.x, y: payload.y }); });
+
+    // Precise positioning: press, nudge 5 px (inside the 7 px long-press tolerance), hold.
+    host.canvas!.dispatch('pointerdown', mouse(vx, vy, 0));
+    host.canvas!.dispatch('pointermove', { clientX: vx + 5, clientY: vy });
+    await wait(700); // past the 550 ms long-press delay
+    fakeWindow.dispatch('pointerup', { ...mouse(vx + 5, vy, 0) });
+
+    assert.deepEqual(
+        { contextMenus: menus.length, x: node.x, y: node.y, undoEntry: diagram.canUndo() },
+        { contextMenus: 0, x: start.x + 5, y: start.y, undoEntry: true },
+        'a held LEFT mouse button must not raise the touch long-press menu: the menu opened, '
+        + 'wiped the in-progress drag, and the 5 px displacement it left behind never reached '
+        + 'history, so Ctrl+Z cannot undo it',
     );
 });

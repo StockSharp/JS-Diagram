@@ -2191,14 +2191,21 @@ export class Diagram {
             // move-beyond-tolerance, pointerup, or any other gesture.
             this.cancelLongPress();
             this.relinkCandidate = null;
-            this.lpStart = { sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY };
-            const downSx = e.clientX, downSy = e.clientY;
-            const r0 = this.canvas.getBoundingClientRect();
-            const localSx = downSx - r0.left, localSy = downSy - r0.top;
-            this.lpTimer = setTimeout(() => {
-                this.lpTimer = null;
-                this.fireContextMenu(localSx, localSy, downSx, downSy);
-            }, this.lpDelayMs);
+            // Touch only. A mouse has a button for this, and arming the timer for it meant holding
+            // the left button still -- which is what positioning a node precisely looks like --
+            // opened the menu after half a second and wiped the drag in progress: the pixels the
+            // node had already travelled stayed, but never reached history, so Ctrl+Z could not
+            // take them back.
+            if (e.pointerType !== 'mouse') {
+                this.lpStart = { sx: e.clientX, sy: e.clientY, px: e.clientX, py: e.clientY };
+                const downSx = e.clientX, downSy = e.clientY;
+                const r0 = this.canvas.getBoundingClientRect();
+                const localSx = downSx - r0.left, localSy = downSy - r0.top;
+                this.lpTimer = setTimeout(() => {
+                    this.lpTimer = null;
+                    this.fireContextMenu(localSx, localSy, downSx, downSy);
+                }, this.lpDelayMs);
+            }
             this.canvas.focus();
             const [sx, sy] = localXY(e);
             if (this.ovHit(sx, sy)) { this.ovDragging = true; this.ovPanTo(sx, sy); return; }
