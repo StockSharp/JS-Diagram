@@ -1313,6 +1313,9 @@ export class Diagram {
         };
     }
     setViewState(state: DiagramViewState): void {
+        if (!Number.isFinite(state.zoom) || !Number.isFinite(state.panX) || !Number.isFinite(state.panY)) {
+            throw new RangeError('ssdiagram: view state zoom and pan must be finite numbers');
+        }
         this.scale = clamp(state.zoom, ZOOM_MIN, ZOOM_MAX);
         this.offX = state.panX;
         this.offY = state.panY;
@@ -1635,6 +1638,9 @@ export class Diagram {
     }
 
     setZoom(scale: number): void {
+        // clamp() passes NaN straight through, and a NaN scale poisons offX/offY on the very next
+        // line -- after which hit-testing, drawing and saveViewState are all dead, permanently.
+        if (!Number.isFinite(scale)) throw new RangeError('ssdiagram: zoom must be a finite number');
         const cx = this.width / 2;
         const cy = this.height / 2;
         const wx = (cx - this.offX) / this.scale;

@@ -2680,4 +2680,47 @@ test('clear() reports the selection it drops through selectionChanged', () => {
     );
 });
 
+test('setZoom() and setViewState() reject non-finite numbers with RangeError instead of poisoning the transform', () => {
+    const { diagram } = makeDiagram();
 
+    let zoomError: unknown = null;
+    try { diagram.setZoom(Number.NaN); } catch (error) { zoomError = error; }
+    const afterZoom = diagram.getViewState();
+
+    let viewError: unknown = null;
+    try {
+        diagram.setViewState({ zoom: 1.5, panX: Number.NaN, panY: 12, overviewVisible: true });
+    } catch (error) { viewError = error; }
+    const afterView = diagram.getViewState();
+
+    // The sibling numeric input of the same file, quoted by the audit as the house rule.
+    let nudgeError: unknown = null;
+    try { diagram.nudgeSelection(Number.NaN, 0); } catch (error) { nudgeError = error; }
+
+    let serializable = true;
+    try { serializeDiagramViewState(afterZoom); } catch { serializable = false; }
+
+    assert.deepEqual(
+        {
+            setZoomThrewRangeError: zoomError instanceof RangeError,
+            viewFiniteAfterSetZoom: Number.isFinite(afterZoom.zoom)
+                && Number.isFinite(afterZoom.panX) && Number.isFinite(afterZoom.panY),
+            viewStateStillSerializable: serializable,
+            setViewStateThrewRangeError: viewError instanceof RangeError,
+            panFiniteAfterSetViewState: Number.isFinite(afterView.panX) && Number.isFinite(afterView.panY),
+            siblingNudgeThrewRangeError: nudgeError instanceof RangeError,
+        },
+        {
+            setZoomThrewRangeError: true,
+            viewFiniteAfterSetZoom: true,
+            viewStateStillSerializable: true,
+            setViewStateThrewRangeError: true,
+            panFiniteAfterSetViewState: true,
+            siblingNudgeThrewRangeError: true,
+        },
+        'setZoom(NaN)/setViewState({panX: NaN}) must throw RangeError like nudgeSelection does, and must '
+        + 'leave scale/offX/offY finite. A false here means clamp() let NaN through: the transform is '
+        + 'poisoned for good, hit-tests and viewChanged carry NaN, and saveViewState() can no longer '
+        + 'serialize the viewport.',
+    );
+});
