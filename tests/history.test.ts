@@ -111,3 +111,38 @@ test('new commands discard redo and clear resets the state', () => {
         redoLabel: null,
     });
 });
+
+test('DiagramCommandHistory.undo()/redo() refuse to run inside an open transaction, like clear() does', () => {
+    const target = { value: 0 };
+    const assignment = (value: number): DiagramCommand => {
+        const previous = target.value;
+        return { label: `set ${value}`, execute: () => { target.value = value; }, undo: () => { target.value = previous; } };
+    };
+
+    const history = new DiagramCommandHistory();
+    history.execute(assignment(10));
+    history.execute(assignment(20));
+    history.undo();                       // one command waiting in the redo stack too
+
+    let undoError: unknown = null;
+    let redoError: unknown = null;
+    let clearError: unknown = null;
+    history.transaction('paste', () => {
+        // A host handler reacting synchronously to an event emitted from inside the transaction.
+        try { history.undo(); } catch (error) { undoError = error; }
+        try { history.redo(); } catch (error) { redoError = error; }
+        try { history.clear(); } catch (error) { clearError = error; }
+    });
+
+    assert.deepEqual(
+        {
+            undoRejected: undoError instanceof Error,
+            redoRejected: redoError instanceof Error,
+            clearRejected: clearError instanceof Error,
+        },
+        { undoRejected: true, redoRejected: true, clearRejected: true },
+        'undo()/redo() must mirror the guard clear() already has: running them while a TransactionFrame '
+        + 'is open pops commands that the still-composing frame is about to record, breaking the LIFO '
+        + 'invariant. false for undo/redo means only clear() is protected.',
+    );
+});

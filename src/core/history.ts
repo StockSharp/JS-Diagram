@@ -79,7 +79,18 @@ export class DiagramCommandHistory {
         }
     }
 
+    private assertNoOpenTransaction(operation: string): void {
+        if (this.transactions.length > 0) {
+            throw new Error(`Cannot ${operation} command history inside a transaction.`);
+        }
+    }
+
     undo(): boolean {
+        // Same guard clear() already has: running history while a transaction is open takes a
+        // committed step out from under the frame being built and breaks the LIFO invariant the
+        // stacks rely on. Reachable synchronously from a host handler for an event emitted from
+        // inside a transaction, so it is not a theoretical misuse.
+        this.assertNoOpenTransaction('undo');
         const command = this.undoCommands.pop();
         if (command === undefined) return false;
         try {
@@ -94,6 +105,7 @@ export class DiagramCommandHistory {
     }
 
     redo(): boolean {
+        this.assertNoOpenTransaction('redo');
         const command = this.redoCommands.pop();
         if (command === undefined) return false;
         try {
@@ -108,9 +120,7 @@ export class DiagramCommandHistory {
     }
 
     clear(): void {
-        if (this.transactions.length > 0) {
-            throw new Error('Cannot clear command history inside a transaction.');
-        }
+        this.assertNoOpenTransaction('clear');
         this.undoCommands.length = 0;
         this.redoCommands.length = 0;
         this.notify();
