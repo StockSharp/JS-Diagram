@@ -2752,18 +2752,24 @@ export class Diagram {
         }
         ctx.restore();
         if (options.overview) this.drawOverview();
-        if (options.runtime) this.drawGlobalError();
+        if (options.runtime) this.drawGlobalError(options.transient);
         if (options.transient) this.drawTooltip();
         if (options.transient && (this.introStart !== null || this.globalErrorFlashStart !== null
             || this.nodes.some((n) => n.errorFlashStart !== null)))
             this.scheduleDraw();   // keep entrance / error feedback animating
     }
-    private drawGlobalError(): void {
+    /**
+     * `transient` gates the flash exactly as it gates every other animation, which an export must
+     * not see: it would bake in whatever point of the pulse it caught, so the same export taken
+     * twice differed in opacity. The gate also keeps the export from consuming the animation --
+     * clearing globalErrorFlashStart from an export cut the flash short on screen.
+     */
+    private drawGlobalError(transient: boolean): void {
         const error = this.runtimeState.globalError;
         if (error === null) return;
         const ctx = this.ctx;
         let flashAlpha = 1;
-        if (this.globalErrorFlashStart !== null) {
+        if (transient && this.globalErrorFlashStart !== null) {
             const elapsed = performance.now() - this.globalErrorFlashStart;
             if (elapsed >= ERROR_FLASH_MS) {
                 this.globalErrorFlashStart = null;

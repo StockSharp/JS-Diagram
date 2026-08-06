@@ -994,6 +994,11 @@ test('opening the context menu drops the hover under it, tooltip and all', () =>
 });
 
 /** Theme background of a diagram under test, deliberately distinct from any export override. */
+/** The dark overlay drawGlobalError paints for a non-neutral error kind. */
+const ERROR_OVERLAY_FILL = 'rgba(55,16,22,0.78)';
+/** How long the error flash pulses for, mirroring ERROR_FLASH_MS in the renderer. */
+const ERROR_FLASH_MS = 1100;
+
 const THEME_BACKGROUND = '#102030';
 const EXPORT_BACKGROUND = '#abcdef';
 
@@ -3341,4 +3346,36 @@ test('a pinch cancels an overview drag and a link snap along with the other gest
         null,
         'the cancelled link gesture left its snap highlight on screen',
     );
+});
+
+test('an export neither bakes the error flash nor consumes the live flash animation', async () => {
+    const { diagram } = makeDiagram();
+    diagram.load([source, sink], []);
+    const internals = diagram as unknown as { globalErrorFlashStart: number | null };
+
+    // A flash in flight: setGlobalError stamps it, and the alpha it produces right now is ~0.7.
+    diagram.setGlobalError('Strategy failed to compile');
+    const svg = diagram.takeSvg();
+    const overlay = new RegExp(`<rect x="0" y="0"[^>]*fill="${ERROR_OVERLAY_FILL.replace(/[().]/g, '\\$&')}"[^>]*/>`).exec(svg);
+    assert.ok(overlay !== null,
+        `setup: the global error overlay should be in the export, got: ${svg.slice(-600)}`);
+
+    const stamp = internals.globalErrorFlashStart;
+    assert.equal(typeof stamp, 'number', 'setup: setGlobalError should have stamped the flash');
+
+    // Let the flash run out with no frame landing on it -- what a throttled or hidden tab does,
+    // since requestAnimationFrame never fires there. Retiring it is a screen draw's job.
+    await new Promise((resolve) => { setTimeout(resolve, ERROR_FLASH_MS + 100); });
+    diagram.takeScreenshot({ includeGrid: false });
+
+    assert.deepEqual(
+        {
+            overlayCarriesFlashOpacity: /opacity="/.test(overlay[0]),
+            flashStartSurvivedExport: internals.globalErrorFlashStart === stamp,
+        },
+        { overlayCarriesFlashOpacity: false, flashStartSurvivedExport: true },
+        'drawGlobalError is not gated on options.transient the way drawNode is, so (a) an export taken within '
+        + `1.1s of an error bakes in whatever pulse alpha the sine happened to be at -- ${overlay[0]} -- making `
+        + 'the same export non-reproducible, and (b) the export draw writes globalErrorFlashStart = null, '
+        + 'stealing animation state from the on-screen diagram');
 });
