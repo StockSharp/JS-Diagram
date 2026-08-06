@@ -3,13 +3,25 @@ import test from 'node:test';
 
 import {
     DiagramDocumentError,
+    type DiagramDocument,
     type DiagramDocumentInput,
+    type DiagramDocumentZoneInput,
     cloneDiagramDocument,
     createDiagramDocument,
     parseDiagramDocument,
     serializeDiagramDocument,
 } from '../src/core/document';
 import { DIAGRAM_DOCUMENT_VERSION, type JsonObject } from '../src/core/model';
+
+/** Runs fn and hands back whatever it threw, so a failure message can quote it. */
+function capture(fn: () => unknown): Error | null {
+    try {
+        fn();
+        return null;
+    } catch (error) {
+        return error instanceof Error ? error : new Error(String(error));
+    }
+}
 import { DiagramNode, Port } from '../src/diagram/types';
 import {
     type DiagramRuntimeState,
@@ -413,4 +425,37 @@ test('two zones cannot share an id', () => {
             { id: 'z', name: 'Two', x: 0, y: 0, width: 10, height: 10 },
         ],
     }), /duplicate zone id/);
+});
+
+test('createDiagramDocument rejects non-finite zone geometry, so a document it saved can be parsed back', () => {
+    const brokenZone: DiagramDocumentZoneInput = {
+        id: 'z',
+        name: 'Broken',
+        x: Number.NaN,
+        y: 0,
+        width: Number.POSITIVE_INFINITY,
+        height: 60,
+    };
+
+    let created: DiagramDocument | null = null;
+    let createError: Error | null = null;
+    try {
+        created = createDiagramDocument({ zones: [brokenZone] });
+    } catch (error) {
+        createError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    let serialized = '<not reached>';
+    let reparseError: Error | null = null;
+    if (created !== null) {
+        serialized = serializeDiagramDocument(created);
+        reparseError = capture(() => parseDiagramDocument(serialized));
+    }
+
+    assert.ok(
+        createError !== null,
+        'createDiagramDocument accepted a zone with x:NaN and width:Infinity; it serialized to '
+        + `${serialized}, and reading that very output back threw `
+        + `"${reparseError === null ? '<parsed cleanly>' : reparseError.message}" - a save that cannot be opened`,
+    );
 });

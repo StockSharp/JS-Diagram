@@ -217,8 +217,9 @@ function normalizeZone(value: unknown, path: string): DiagramDocumentZone {
     return {
         id: requireIdentifier(input.id, `${path}.id`),
         name: requireString(input.name, `${path}.name`),
-        x: requireNumber(input.x, `${path}.x`),
-        y: requireNumber(input.y, `${path}.y`),
+        // Finite, like node coordinates: NaN survives every arithmetic check and writes as null.
+        x: requireFiniteNumber(input.x, `${path}.x`),
+        y: requireFiniteNumber(input.y, `${path}.y`),
         width: requirePositiveSize(input.width, `${path}.width`),
         height: requirePositiveSize(input.height, `${path}.height`),
         color: input.color === undefined || input.color === null ? '' : requireString(input.color, `${path}.color`),
@@ -229,7 +230,9 @@ function normalizeZone(value: unknown, path: string): DiagramDocumentZone {
 // A zone with no area cannot be pointed at, and a negative one paints outside itself, so the
 // size is refused rather than clamped - a caller that computed it wrong wants to hear about it.
 function requirePositiveSize(value: unknown, path: string): number {
-    const size = requireNumber(value, path);
+    // Finite, not merely positive: Infinity satisfies `> 0` and then serializes to null, so the
+    // document would save without complaint and fail to parse back.
+    const size = requireFiniteNumber(value, path);
     if (!(size > 0)) throw new DiagramDocumentError('size must be greater than zero', path);
     return size;
 }
