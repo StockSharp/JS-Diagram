@@ -989,6 +989,35 @@ test('opening the context menu drops the hover under it, tooltip and all', () =>
     assert.deepEqual(hovers, [true, false], 'the hover survived the menu opening');
 });
 
+const rightButton = (clientX: number, clientY: number): Record<string, unknown> => ({
+    clientX, clientY, button: 2, pointerId: 1, pointerType: 'mouse',
+    shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
+});
+
+test('a right-button drag across a node body leaves the node where it was', () => {
+    const { diagram, host, fakeWindow } = makeDiagram();
+    diagram.load([source, sink], []);
+
+    const node = diagram.findNode('source')!;
+    const start = { x: node.x, y: node.y };
+    const [vx, vy] = diagram.worldToView(node.x + node.w / 2, node.y + node.h / 2);
+
+    // Right button pressed on the body, dragged 120x60 screen px (scale is 1 after the fit).
+    // The trailing contextmenu is the real desktop sequence: Windows raises it on release, after
+    // pointerup has already committed the drag, so the menu cannot take the movement back.
+    host.canvas!.dispatch('pointerdown', rightButton(vx, vy));
+    host.canvas!.dispatch('pointermove', { clientX: vx + 120, clientY: vy + 60 });
+    fakeWindow.dispatch('pointerup', rightButton(vx + 120, vy + 60));
+    host.canvas!.dispatch('contextmenu', rightButton(vx + 120, vy + 60));
+
+    assert.deepEqual(
+        { x: node.x, y: node.y, undoEntry: diagram.canUndo() },
+        { x: start.x, y: start.y, undoEntry: false },
+        'a non-primary (right) button must not drag a node: the node moved and/or a "drag" entry '
+        + 'was pushed onto the undo stack by a gesture that only meant to open a context menu',
+    );
+});
+
 test('destroy removes the owned canvas', () => {
     const { diagram, host, fakeWindow } = makeDiagram();
     assert.ok((host.canvas?.listenerCount() ?? 0) > 0);

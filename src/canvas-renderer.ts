@@ -2253,10 +2253,12 @@ export class Diagram {
             if (node !== null) {
                 const add = e.shiftKey || e.ctrlKey || e.metaKey;
                 if (this.permissions.select) {
-                    if (add) { this.toggleSelect(node); return; }
+                    // A right-click still selects what it landed on, so the menu that follows acts
+                    // on the node under the cursor -- but only the primary button may drag it.
+                    if (add && e.button === 0) { this.toggleSelect(node); return; }
                     if (!this.selectedNodes.has(node)) this.selectNode(node);
                 }
-                if (this.permissions.moveNodes) {
+                if (this.permissions.moveNodes && e.button === 0) {
                     this.dragNode = node;
                     this.dragAnchor = { wx, wy };
                     const moving = this.selectedNodes.has(node) ? [...this.selectedNodes] : [node];
@@ -2271,6 +2273,9 @@ export class Diagram {
                 if (this.permissions.select) this.selectLink(link);
                 return;
             }
+            // A secondary button on empty canvas is on its way to the context menu: it must not
+            // clear the selection the menu is about to act on, nor start a rubber band.
+            if (e.button !== 0 && e.button !== 1) return;
             // empty space: middle-button / Ctrl / Alt / touch = pan;
             // else rubber-band select. Touch always pans because mobile
             // users can't hold modifier keys and rubber-band drag-select
