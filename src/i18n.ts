@@ -108,6 +108,8 @@ export interface DesignerI18n {
     ctxExportPng?: string;
     ctxExportSvg?: string;
     ctxOverview?: string;
+    /** Palette heading for elements that declare no group of their own. */
+    paletteCommonGroup?: string;
     properties?: string;
     ctxHelp?: string;
 

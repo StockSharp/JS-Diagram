@@ -4,6 +4,7 @@ import test from 'node:test';
 import { StockSharpCatalog } from '../src/diagram/catalog';
 import { PALETTE_DRAG_MIME, StockSharpPalette } from '../src/diagram/palette';
 import { Node } from '../src/diagram/types';
+import { t } from '../src/i18n';
 
 class FakeClassList {
     private readonly values = new Set<string>();
@@ -245,4 +246,45 @@ test('palette preserves tree state while filtering and supports dynamic exclusio
 
     catalog.addNodeType(new Node({ id: 'late', name: 'Late registration' }));
     assert.equal(host.children.length, 0);
+});
+
+test('the default palette group heading comes from the i18n bridge', () => {
+    installDom();
+    const fakeWindow = { } as Record<string, unknown>;
+    Object.assign(globalThis, { window: fakeWindow });
+
+    // Every key the bridge is asked for answers with the same marker, so the assertion below does
+    // not have to guess which key the heading ought to use -- only that it goes through the bridge.
+    const MARKER = '<<translated>>';
+    fakeWindow.__designerI18n = new Proxy({}, { get: () => MARKER });
+
+    try {
+        // Control: the bridge answers in this test, so an English heading below is the control's
+        // own hardcoded text and not a broken fixture.
+        assert.equal(t('undo', 'Undo'), MARKER,
+            'the i18n bridge is not installed, so this test proves nothing');
+
+        const catalog = new StockSharpCatalog();
+        // Two ways a node lands under the built-in default heading, and a localized host is owed a
+        // localized heading for both. Omitting groupName is the ordinary case and never reaches the
+        // palette at all -- Node's own constructor has already substituted 'Common' (types.ts:135).
+        // Passing an empty one is what actually reaches the palette's fallback (palette.ts:303, the
+        // line the audit cites), because ?? does not fire on ''. Asserting only the first would let
+        // a fix to the cited line alone look complete while the common case still reads English.
+        catalog.addNodeType(new Node({ id: 'ungrouped', name: 'Ungrouped element' }));
+        catalog.addNodeType(new Node({ id: 'blank-group', name: 'Blank group element', groupName: '' }));
+        const host = new FakeElement('div');
+        new StockSharpPalette({ div: host as unknown as HTMLElement, catalog });
+
+        const headings = host.querySelectorAll('.d-palette-group-name');
+        assert.notEqual(headings.length, 0,
+            'the palette rendered no group heading, so this test is not exercising the finding');
+
+        for (const heading of headings) {
+            assert.equal(heading.textContent, MARKER,
+                `the default group heading ${JSON.stringify(heading.textContent)} is hardcoded English that never reaches the i18n bridge, so a fully localized host still shows English`);
+        }
+    } finally {
+        delete (fakeWindow as unknown as { __designerI18n?: unknown }).__designerI18n;
+    }
 });

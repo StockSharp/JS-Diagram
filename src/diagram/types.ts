@@ -152,7 +152,7 @@ export class Node {
         this.id = init.id;
         this.name = init.name;
         this.description = init.description ?? '';
-        this.groupName = init.groupName ?? 'Common';
+        this.groupName = init.groupName ?? DEFAULT_GROUP_NAME;
         this.inPorts = (init.inPorts ?? []).map((p) => (p instanceof Port ? p : new Port(p)));
         this.outPorts = (init.outPorts ?? []).map((p) => (p instanceof Port ? p : new Port(p)));
         this.icon = init.icon ?? '';
@@ -243,6 +243,12 @@ export class DiagramNode extends Node {
 }
 
 export type LinkEndpoint = string | { id: string };
+
+/**
+ * Heading an element falls under when it declares no group. Shared so the palette can recognise
+ * the value it substituted here and translate it, rather than every layer spelling it separately.
+ */
+export const DEFAULT_GROUP_NAME = 'Common';
 
 export interface LinkInit {
     id?: string;

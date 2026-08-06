@@ -374,6 +374,11 @@ export declare class Diagram {
     playIntro(): void;
     setOverviewVisible(v: boolean): void;
     setTypeColors(colors: Readonly<Record<string, string>>): void;
+    /**
+     * Keyed the way port types are compared everywhere else. Connection compatibility is case- and
+     * space-insensitive, so an imported scheme spelling a socket "candle " connects to "Candle" and
+     * then fell through to a hash colour, showing one logical type in two colours in one diagram.
+     */
     setTheme(t: {
         background?: string;
         gridColor?: string;
@@ -401,6 +406,12 @@ export declare class Diagram {
         x: number;
         y: number;
     }): string[];
+    /**
+     * `transient` gates the flash exactly as it gates every other animation, which an export must
+     * not see: it would bake in whatever point of the pulse it caught, so the same export taken
+     * twice differed in opacity. The gate also keeps the export from consuming the animation --
+     * clearing globalErrorFlashStart from an export cut the flash short on screen.
+     */
 }
 export declare const version = "0.1.0";
 export {};
@@ -1335,6 +1346,11 @@ export declare class DiagramNode extends Node {
 export type LinkEndpoint = string | {
     id: string;
 };
+/**
+ * Heading an element falls under when it declares no group. Shared so the palette can recognise
+ * the value it substituted here and translate it, rather than every layer spelling it separately.
+ */
+export declare const DEFAULT_GROUP_NAME = "Common";
 export interface LinkInit {
     id?: string;
     outNode: LinkEndpoint;
@@ -1583,6 +1599,8 @@ export interface DesignerI18n {
     ctxExportPng?: string;
     ctxExportSvg?: string;
     ctxOverview?: string;
+    /** Palette heading for elements that declare no group of their own. */
+    paletteCommonGroup?: string;
     properties?: string;
     ctxHelp?: string;
     fullscreenEnter?: string;

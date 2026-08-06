@@ -1,6 +1,7 @@
+import { t } from '../i18n.js';
 import { EventEmitter } from './event-emitter.js';
 import { StockSharpCatalog } from './catalog.js';
-import { Node } from './types.js';
+import { DEFAULT_GROUP_NAME, Node } from './types.js';
 
 export interface PaletteOptions {
     div: HTMLElement;
@@ -300,7 +301,13 @@ export class StockSharpPalette extends EventEmitter<PaletteEvents> {
 }
 
 function groupNameOf(node: Node): string {
-    return node.groupName.length > 0 ? node.groupName : 'Common';
+    // The only caption the palette invents. Left hardcoded it was the one English word surviving
+    // in a fully translated palette. The default arrives here either as an empty group name or as
+    // the substitute Node's constructor already put in, so both spellings resolve to the same key.
+    const group = node.groupName;
+    return group.length > 0 && group !== DEFAULT_GROUP_NAME
+        ? group
+        : t('paletteCommonGroup', DEFAULT_GROUP_NAME);
 }
 
 function normalizeTypeId(typeId: string): string {
