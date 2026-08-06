@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { Diagram, version, type DiagramNodeInit } from '../src/canvas-renderer';
 import { createDiagramDocument } from '../src/core/document';
+import { serializeDiagramViewState } from '../src/core/view-state';
 import type { ContextMenuItemState } from '../src/diagram/api';
 
 // The menu is a tree: most entries are commands, the export entry is a submenu. Tests that
@@ -2659,3 +2660,24 @@ test('copy/paste keeps a link style, the way load/save already does', () => {
         'the pasted link came back solid: pasteDocument rebuilds links without their style',
     );
 });
+
+test('clear() reports the selection it drops through selectionChanged', () => {
+    const { diagram } = makeDiagram();
+    diagram.load([source, sink], []);
+    diagram.selectNodesById(['source']);
+    assert.deepEqual(diagram.getSelection().nodeIds, ['source'], 'setup: the node must be selected before clear()');
+
+    const events: Array<{ nodeIds: readonly string[]; primaryNodeId: string | null }> = [];
+    diagram.on('selectionChanged', (selection) => events.push(selection));
+    diagram.clear();
+
+    assert.deepEqual(
+        { selectionEvents: events.length, lastPayload: events[events.length - 1] ?? null },
+        { selectionEvents: 1, lastPayload: { nodeIds: [], linkIds: [], port: null, primaryNodeId: null, primaryLinkId: null } },
+        'clear() empties selectedNode/selectedNodes/selectedLink/selectedPort, so it owes exactly one '
+        + 'selectionChanged carrying the now-empty selection — every other selection mutation emits one. '
+        + 'Zero events mean a property panel keeps showing a node from the discarded document.',
+    );
+});
+
+

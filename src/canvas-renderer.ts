@@ -953,12 +953,17 @@ export class Diagram {
         // discarded strategy kept drawing its zones over the next one and, worse, saveDocument()
         // wrote them into that unrelated strategy's file.
         this.zones = [];
+        // Every other path that empties the selection announces it. Staying silent here left a
+        // host's property panel showing a node from the document that had just been thrown away.
+        const hadSelection = this.selectedNode !== null || this.selectedNodes.size > 0
+            || this.selectedLink !== null || this.selectedPort !== null;
         this.selectedNode = null; this.selectedNodes.clear(); this.selectedLink = null; this.selectedPort = null;
         this.documentMetadata = {};
         this.runtimeState = createDiagramRuntimeState();
         this.runtimePulse = 0;
         this.globalErrorFlashStart = null;
         this.history.clear();
+        if (hadSelection) this.emitSelectionChanged();
         this.emitRuntimeStateChanged();
     }
     relink(
