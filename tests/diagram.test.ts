@@ -2825,3 +2825,40 @@ test('holding the left mouse button opens no context menu and keeps the drag und
         + 'history, so Ctrl+Z cannot undo it',
     );
 });
+
+test('a port covered by another node body loses the hit test to that body', () => {
+    const { diagram, host, fakeWindow } = makeDiagram();
+    // "cover" is loaded second, so it is the topmost node and its body hides the out port of "under".
+    diagram.load([{
+        id: 'under', name: 'Under', x: 10, y: 20,
+        outPorts: [{ id: 'out', name: 'Out', type: 'number' }],
+    }, {
+        id: 'cover', name: 'Cover', x: 170, y: 0,
+    }], []);
+
+    const under = diagram.findNode('under')!;
+    const cover = diagram.findNode('cover')!;
+    const port = under.outPorts[0];
+    assert.ok(
+        port.cx >= cover.x && port.cx <= cover.x + cover.w
+        && port.cy >= cover.y && port.cy <= cover.y + cover.h,
+        `setup error, not the finding: the port (${port.cx}, ${port.cy}) is not inside the cover `
+        + `body (${cover.x}..${cover.x + cover.w}, ${cover.y}..${cover.y + cover.h})`,
+    );
+
+    const [vx, vy] = diagram.worldToView(port.cx, port.cy);
+    const portClicks: string[] = [];
+    diagram.on('portClicked', (payload) => { portClicks.push(`${payload.node.id}.${payload.port.id}`); });
+
+    host.canvas!.dispatch('pointerdown', mouse(vx, vy, 0));
+    fakeWindow.dispatch('pointerup', { ...mouse(vx, vy, 0) });
+
+    const selection = diagram.getSelection();
+    assert.deepEqual(
+        { selected: selection.nodeIds, port: selection.port, portClicks },
+        { selected: ['cover'], port: null, portClicks: [] },
+        'a click on visible pixels of the top node must hit that node: the occluded port of the '
+        + 'node underneath won the hit test, so the selection and portClicked went to something '
+        + 'the user cannot see',
+    );
+});

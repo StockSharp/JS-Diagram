@@ -1812,11 +1812,16 @@ export class Diagram {
 
     // ---- hit testing (world coords) ---------------------------------
     private portAt(wx: number, wy: number): { node: NodeModel; port: PortModel } | null {
+        // Walks front to back and stops at the first node whose BODY covers the point, so a socket
+        // hidden underneath a node drawn on top of it can no longer win the hit test. Without that
+        // stop, clicking the visible body of the front node selected the one behind it, and on an
+        // output socket started dragging a wire out of a port that is not on screen.
         for (let i = this.nodes.length - 1; i >= 0; i -= 1) {
             const n = this.nodes[i];
             for (const p of [...n.inPorts, ...n.outPorts]) {
                 if ((wx - p.cx) ** 2 + (wy - p.cy) ** 2 <= (PORT_R + 4) ** 2) return { node: n, port: p };
             }
+            if (wx >= n.x && wx <= n.x + n.w && wy >= n.y && wy <= n.y + n.h) return null;
         }
         return null;
     }
