@@ -990,6 +990,11 @@ test('opening the context menu drops the hover under it, tooltip and all', () =>
     assert.deepEqual(hovers, [true, false], 'the hover survived the menu opening');
 });
 
+const mouse = (clientX: number, clientY: number, button: number): Record<string, unknown> => ({
+    clientX, clientY, button, pointerId: 1, pointerType: 'mouse',
+    shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
+});
+
 const rightButton = (clientX: number, clientY: number): Record<string, unknown> => ({
     clientX, clientY, button: 2, pointerId: 1, pointerType: 'mouse',
     shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
@@ -2767,5 +2772,28 @@ test('Ctrl+Z obeys enableUndo(false) and, when allowed, announces itself as undo
         + '(node stays at 140,160) and must emit undoRequested once when undo is allowed. A moved-back '
         + 'node means the keyboard bypassed enableUndo; zero events mean a host listening for undo '
         + 'never learns about keyboard undo.',
+    );
+});
+
+test('a plain click on a node emits no nodeMoved event', () => {
+    const { diagram, host, fakeWindow } = makeDiagram();
+    diagram.load([source, sink], []);
+
+    const node = diagram.findNode('source')!;
+    const [vx, vy] = diagram.worldToView(node.x + node.w / 2, node.y + node.h / 2);
+
+    const moved: string[] = [];
+    diagram.on('nodeMoved', (payload) => { moved.push(payload.node.id); });
+
+    // Press and release on the same pixel: a selection click, no displacement whatsoever.
+    host.canvas!.dispatch('pointerdown', mouse(vx, vy, 0));
+    fakeWindow.dispatch('pointerup', { ...mouse(vx, vy, 0) });
+
+    assert.deepEqual(
+        { movedEvents: moved, x: node.x, y: node.y },
+        { movedEvents: [], x: 10, y: 20 },
+        'a click that displaces nothing must not report a move: nodeMoved fired for a node that '
+        + 'stayed at its exact coordinates, so host dirty-tracking marks the document changed on '
+        + 'every selection click',
     );
 });

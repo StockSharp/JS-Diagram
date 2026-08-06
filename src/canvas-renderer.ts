@@ -2432,7 +2432,13 @@ export class Diagram {
                 const moves = this.dragStart
                     .map((it) => ({ id: it.n.id, fromX: it.x, fromY: it.y, toX: it.n.x, toY: it.n.y }))
                     .filter((m) => m.fromX !== m.toX || m.fromY !== m.toY);
-                for (const it of this.dragStart) this.emit('nodeMoved', { node: it.n });
+                // Announce the same set the undo step records. Emitting for every node the drag
+                // touched reported a move for a plain selection click -- one per selected node --
+                // and a host doing dirty tracking marked the strategy modified for nothing.
+                const moved = new Set(moves.map((m) => m.id));
+                for (const it of this.dragStart) {
+                    if (moved.has(it.n.id)) this.emit('nodeMoved', { node: it.n });
+                }
                 this.dragNode = null;
                 this.dragStart = [];
                 if (moves.length > 0) {
