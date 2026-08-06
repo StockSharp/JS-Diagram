@@ -604,17 +604,28 @@ export function renderAll(root: ParentNode = document, options: DiagramEmbedOpti
 		if (host.dataset.rendered === '1')
 			return;
 
+		// The flag is a re-entry guard, not a record of success: it goes up before the async
+		// render so a second renderAll() cannot start the same host twice, and comes back down if
+		// that render produced nothing. Left up, a host whose source failed once -- an unreachable
+		// URL, a transient network error -- kept its error note for the life of the page, because
+		// every later renderAll() skipped it even after the source came back.
+		const started = (run: Promise<DiagramEmbedHandle | null>): void => {
+			host.dataset.rendered = '1';
+			void run.then(
+				(handle) => { if (handle === null) delete host.dataset.rendered; },
+				() => { delete host.dataset.rendered; },
+			);
+		};
+
 		const src = host.dataset.diagramSrc;
 		if (src) {
-			host.dataset.rendered = '1';
-			void renderFromSource(host, PALETTE_URL, src, options);
+			started(renderFromSource(host, PALETTE_URL, src, options));
 			return;
 		}
 
 		const inline = host.querySelector('script[type="application/json"]');
 		if (inline) {
-			host.dataset.rendered = '1';
-			void renderFromInline(host, PALETTE_URL, inline.textContent ?? '', options);
+			started(renderFromInline(host, PALETTE_URL, inline.textContent ?? '', options));
 		}
 	});
 }

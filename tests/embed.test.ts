@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
     destroyRenderedDiagram,
+    renderAll,
     renderFromSource,
     renderScheme,
     type DiagramEmbedScheme,
@@ -185,6 +186,11 @@ function installDom(fetchImpl: typeof fetch): void {
         Image: class {},
         fetch: fetchImpl,
     });
+}
+
+/** Lets the pending fetch/JSON promises and the zero-delay fit timer run to completion. */
+async function settle(): Promise<void> {
+    for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 function paletteResponse(): Response {
@@ -453,4 +459,51 @@ test('a host that sets no error texts still gets the built-in ones', async () =>
 
     assert.equal(await renderFromSource(empty as unknown as HTMLElement, '/palette.json', '/src.json'), null);
     assert.equal(empty.textContent, 'Diagram is empty or malformed.');
+});
+
+test('a host whose embed failed is rendered again by the next renderAll', async () => {
+    // An ordinary failure: a source URL that answered badly once. Nothing about it says "never
+    // draw this element again", which is what latching dataset.rendered amounts to.
+    let sourceReachable = false;
+    installDom((async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/data/designer-palette.json') return paletteResponse();
+        if (url === '/scheme.json') {
+            return sourceReachable
+                ? { ok: true, text: async () => JSON.stringify({
+                    Content: { Value: { Scheme: { Model: {
+                        Nodes: [{ Key: 'node', TypeId: 'whatever', X: 10, Y: 20 }],
+                        Links: [],
+                    } } } },
+                }) } as Response
+                : { ok: false } as Response;
+        }
+        throw new Error(`Unexpected URL: ${url}`);
+    }) as unknown as typeof fetch);
+    const host = new FakeHost();
+    host.dataset.diagramSrc = '/scheme.json';
+    const root = { querySelectorAll: () => [host] } as unknown as ParentNode;
+
+    renderAll(root);
+    await settle();
+
+    // Setup check: the transient failure really did take the load-error path.
+    assert.equal(host.textContent, 'Diagram source could not be loaded.',
+        'the host did not take the load-failure path, so this test is not exercising the finding');
+    assert.equal(host.classList.contains('ss-diagram-error'), true,
+        'the failure note was not applied, so this test is not exercising the finding');
+
+    assert.notEqual(host.dataset.rendered, '1',
+        'a failed embed stayed marked as rendered, so the flag permanently hides a host that never drew anything');
+
+    // The consequence a reader of the page sees: the source is reachable again, yet the element
+    // stays a text note for the rest of the session.
+    sourceReachable = true;
+    renderAll(root);
+    await settle();
+
+    assert.equal(host.children.length, 2,
+        'renderAll skipped a host that had only ever failed, so one transient network error is permanent');
+    assert.equal(host.classList.contains('ss-diagram-error'), false,
+        'the error note survived a successful re-render');
 });
