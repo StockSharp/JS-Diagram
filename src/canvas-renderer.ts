@@ -1398,6 +1398,9 @@ export class Diagram {
             offY: this.offY,
             overviewVisible: this.overviewVisible,
             background: this.opts.background,
+            // Drawing the overview recomputes this from the export frame. Left behind, the next
+            // click on the on-screen minimap panned to a point in the export's coordinates.
+            ovGeo: this.ovGeo,
         };
         try {
             this.ctx = outputContext;
@@ -1427,6 +1430,7 @@ export class Diagram {
             this.offY = previous.offY;
             this.overviewVisible = previous.overviewVisible;
             this.opts.background = previous.background;
+            this.ovGeo = previous.ovGeo;
         }
         return output;
     }
@@ -1498,6 +1502,9 @@ export class Diagram {
             offY: this.offY,
             overviewVisible: this.overviewVisible,
             background: this.opts.background,
+            // Drawing the overview recomputes this from the export frame. Left behind, the next
+            // click on the on-screen minimap panned to a point in the export's coordinates.
+            ovGeo: this.ovGeo,
         };
 
         try {
@@ -1533,6 +1540,7 @@ export class Diagram {
             this.offY = previous.offY;
             this.overviewVisible = previous.overviewVisible;
             this.opts.background = previous.background;
+            this.ovGeo = previous.ovGeo;
         }
 
         return surface.toSvg();

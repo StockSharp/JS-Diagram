@@ -3379,3 +3379,30 @@ test('an export neither bakes the error flash nor consumes the live flash animat
         + 'the same export non-reproducible, and (b) the export draw writes globalErrorFlashStart = null, '
         + 'stealing animation state from the on-screen diagram');
 });
+
+test('an export leaves the minimap geometry describing the on-screen minimap', () => {
+    const { diagram } = makeDiagram();
+    diagram.load([
+        { id: 'source', name: 'Source', x: 0, y: 0, outPorts: [{ id: 'out', name: 'Value', type: 'number' }] },
+        { id: 'sink', name: 'Sink', x: 600, y: 500, inPorts: [{ id: 'in', name: 'Value', type: 'number' }] },
+    ], []);
+
+    // draw() is private, but the finding is about a private field an export forgets to restore, and
+    // the on-screen frame is what has to put that field there in the first place.
+    const internals = diagram as unknown as {
+        draw(): void;
+        ovGeo: { x: number; y: number; w: number; h: number; s: number; minX: number; minY: number } | null;
+    };
+    internals.draw();
+    const onScreen = internals.ovGeo;
+    assert.ok(onScreen !== null && onScreen.w > 0,
+        'setup: the on-screen frame must have placed the minimap before the export runs');
+    const before = { ...onScreen };
+
+    diagram.takeScreenshot({ scope: 'content', includeOverview: true });
+
+    assert.deepEqual(internals.ovGeo, before,
+        'the export left the minimap geometry in export coordinates: takeScreenshot restores nine view fields '
+        + 'in its finally block but not ovGeo, and schedules no repaint, so hit-testing the minimap afterwards '
+        + 'maps clicks through the export frame instead of the visible one and pans the viewport to the wrong place');
+});
