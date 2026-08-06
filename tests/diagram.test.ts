@@ -2924,3 +2924,30 @@ test('takeSvg paints the requested export background instead of the live theme o
         + `with an opaque rect of the theme colour -- so raster and vector exports of the same options come out `
         + 'different colours');
 });
+
+test('takeScreenshot() with no options copies a frame that shows the current model', () => {
+    const { diagram, host } = makeDiagram();
+    const live = host.canvas!;
+
+    diagram.load([source, sink], [{ from: 'source', fromPort: 'out', to: 'sink', toPort: 'in' }]);
+
+    assert.equal(live.drawnText.length, 0,
+        'setup: the frame load() scheduled has not run yet -- requestAnimationFrame is inert in the harness, '
+        + 'which is exactly the state a caller is in when it exports right after a mutation');
+
+    // The path with options is semantically the same export and always repaints.
+    const redrawn = diagram.takeScreenshot({ includeGrid: true }) as unknown as FakeCanvas;
+    assert.ok(redrawn.drawnText.includes('Source') && redrawn.drawnText.includes('Sink'),
+        `reference: the redraw path renders the loaded nodes, drew ${JSON.stringify(redrawn.drawnText)}`);
+
+    const copy = diagram.takeScreenshot() as unknown as FakeCanvas;
+
+    assert.equal(copy.drawImageCount, 1,
+        'setup: the fast path is supposed to be a bitmap copy of the live canvas');
+    assert.deepEqual(
+        { source: live.drawnText.includes('Source'), sink: live.drawnText.includes('Sink') },
+        { source: true, sink: true },
+        'takeScreenshot() copied the live bitmap without repainting it first: the pixels still hold the frame '
+        + 'from before load(), so the returned canvas shows stale content (empty, right after construction) '
+        + 'while takeScreenshot({includeGrid:true}) of the same diagram is up to date');
+});

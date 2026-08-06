@@ -1349,6 +1349,11 @@ export class Diagram {
         }
 
         if (scope === 'viewport' && Object.keys(options).length === 0) {
+            // Mutations only schedule a repaint, so the bitmap on screen is still the previous
+            // frame until it lands. Copying it as-is handed back a picture of the state before the
+            // edit -- or a blank one right after construction -- while the very same call with any
+            // option took the redraw path and came out current.
+            if (this.drawScheduled) this.draw();
             const copy = document.createElement('canvas');
             copy.width = this.canvas.width;
             copy.height = this.canvas.height;
