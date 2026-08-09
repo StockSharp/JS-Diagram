@@ -1,6 +1,6 @@
 # StockSharp JS Strategy Diagram
 
-[![Build and test](https://github.com/StockSharp/Diagram/actions/workflows/ci.yml/badge.svg)](https://github.com/StockSharp/Diagram/actions/workflows/ci.yml)
+[![Build and test](https://github.com/StockSharp/JS-Diagram/actions/workflows/ci.yml/badge.svg)](https://github.com/StockSharp/JS-Diagram/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/%40stocksharp%2Fdiagram.svg)](https://www.npmjs.com/package/@stocksharp/diagram)
 [![License](https://img.shields.io/badge/license-StockSharp%20EULA-c8202f.svg)](LICENSE)
 
@@ -10,10 +10,10 @@ renderer, read-only web embed, and versioned diagram document model.
 
 ![StockSharp JS Strategy Diagram — visual strategy editor with typed connections and element palette](sample.png)
 
-[Live demo](https://stocksharp.github.io/Diagram/demo/) ·
+[Live demo](https://stocksharp.github.io/JS-Diagram/demo/) ·
 [StockSharp website](https://stocksharp.com/) ·
-[GitHub repository](https://github.com/StockSharp/Diagram) ·
-[Issue tracker](https://github.com/StockSharp/Diagram/issues)
+[GitHub repository](https://github.com/StockSharp/JS-Diagram) ·
+[Issue tracker](https://github.com/StockSharp/JS-Diagram/issues)
 
 The demo uses the same full stack exported to applications. It is not a
 separate mock renderer.
@@ -70,7 +70,7 @@ The package also ships a ready-to-use browser bundle exposed as
 </script>
 ```
 
-See the [complete example](https://github.com/StockSharp/Diagram/blob/main/examples/basic.ts)
+See the [complete example](https://github.com/StockSharp/JS-Diagram/blob/main/examples/basic.ts)
 for catalog construction, the draggable palette, typed links, history,
 read-only mode, resize handling and theme switching.
 
