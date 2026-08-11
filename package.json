@@ -1,6 +1,6 @@
 {
   "name": "@stocksharp/diagram",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Browser strategy-diagram editor for StockSharp with typed ports, palette, canvas rendering, persistence, and a TypeScript API.",
   "license": "SEE LICENSE IN LICENSE",
   "author": {
@@ -11,7 +11,7 @@
     "type": "git",
     "url": "git+https://github.com/StockSharp/JS-Diagram.git"
   },
-  "homepage": "https://stocksharp.github.io/JS-Diagram/",
+  "homepage": "https://stocksharp.com",
   "bugs": {
     "url": "https://github.com/StockSharp/JS-Diagram/issues"
   },
