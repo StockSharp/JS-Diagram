@@ -231,6 +231,38 @@ test('embed rendering replaces and disposes every resource owned by a host', asy
     assert.equal(host.children.length, 0);
 });
 
+test('the download button appears only for a host that listens, and only asks', async () => {
+    installDom(async () => paletteResponse());
+    const withoutHost = new FakeHost();
+    const plain = await renderScheme(withoutHost as unknown as HTMLElement, '/palette.json', emptyScheme, {});
+    assert.notEqual(plain, null);
+    assert.equal(plain!.diagram.isDownloadButtonVisible(), false);
+    plain!.destroy();
+
+    const host = new FakeHost();
+    const asked: string[] = [];
+    const handle = await renderScheme(
+        host as unknown as HTMLElement,
+        '/palette.json',
+        emptyScheme,
+        {
+            onExportRequested: ({ format }) => { asked.push(format); },
+        },
+    );
+    assert.notEqual(handle, null);
+    assert.equal(handle!.diagram.isDownloadButtonVisible(), true);
+
+    const button = host.children.find(
+        (child): child is FakeButton => child instanceof FakeButton && child.className.includes('download'),
+    )!;
+    button.dispatch('click');
+
+    // The control writes nothing itself: it says what was asked for and leaves the saving to the host.
+    assert.deepEqual(asked, ['document']);
+
+    handle!.destroy();
+});
+
 test('embed forwards fullscreen requests to the host callback', async () => {
     installDom(async () => paletteResponse());
     const host = new FakeHost();

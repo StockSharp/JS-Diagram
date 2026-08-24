@@ -11,7 +11,7 @@ import { t } from './i18n.js';
 import { StockSharpDiagram } from './diagram/stocksharp-diagram.js';
 import { StockSharpCatalog } from './diagram/catalog.js';
 import { DiagramNode, Link, Node, Port, PortType } from './diagram/types.js';
-import type { FullscreenRequestedPayload } from './diagram/api.js';
+import type { ExportRequestedPayload, FullscreenRequestedPayload } from './diagram/api.js';
 import { toPortDynamicMode } from './core/model.js';
 import type { PortDynamicMode } from './core/model.js';
 
@@ -56,6 +56,14 @@ export interface DiagramEmbedHandle {
 export interface DiagramEmbedOptions {
 	onFullscreenRequested?: (
 		request: FullscreenRequestedPayload,
+		handle: DiagramEmbedHandle,
+	) => void;
+	/**
+	 * Called when the reader asks for the diagram to be saved. The control writes no files; a host that
+	 * passes this gets the button, and does the saving itself.
+	 */
+	onExportRequested?: (
+		request: ExportRequestedPayload,
 		handle: DiagramEmbedHandle,
 	) => void;
 	onDestroyed?: (handle: DiagramEmbedHandle) => void;
@@ -382,6 +390,10 @@ async function renderSchemeAtRevision(
 	// The host page passes its wording the same way it passes the error texts: through the dataset,
 	// "enter|exit". Left out, the button keeps its English defaults.
 	const [enterLabel, exitLabel] = (div.dataset.diagramFullscreen ?? '').split('|');
+	// The download button appears only where a host listens for the request; its wording comes the same
+	// way as the rest, and its absence leaves the button hidden.
+	const downloadLabel = div.dataset.diagramDownload;
+	const showDownloadButton = options.onExportRequested !== undefined;
 
 	let diagram: StockSharpDiagram;
 	try {
@@ -389,6 +401,8 @@ async function renderSchemeAtRevision(
 			div,
 			catalog,
 			...(enterLabel && exitLabel ? { fullscreenLabels: { enter: enterLabel, exit: exitLabel } } : {}),
+			...(showDownloadButton ? { showDownloadButton: true } : {}),
+			...(downloadLabel ? { downloadLabel } : {}),
 		});
 	} catch (error) {
 		div.replaceChildren();
@@ -430,6 +444,11 @@ async function renderSchemeAtRevision(
 	activeRenders.set(div, handle);
 	connectedRenders.add(handle);
 	ensureDisconnectedHostObserver();
+	if (options.onExportRequested !== undefined) {
+		const notifyHost = options.onExportRequested;
+		cleanups.push(diagram.on('exportRequested', (request) => notifyHost(request, handle)));
+	}
+
 	if (options.onFullscreenRequested !== undefined) {
 		const notifyHost = options.onFullscreenRequested;
 		cleanups.push(diagram.on('fullscreenRequested', (request) => notifyHost(request, handle)));

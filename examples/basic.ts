@@ -133,6 +133,8 @@ const diagram = new StockSharpDiagram({
     div: diagramHost,
     catalog,
     showFullscreenButton: true,
+    // The demo saves what the control asks for, so it shows the button that asks.
+    showDownloadButton: true,
 });
 (window as Window & { stockSharpDiagramDemo?: StockSharpDiagram }).stockSharpDiagramDemo = diagram;
 

@@ -152,7 +152,9 @@ class FakeHost {
     appendChild<T extends FakeCanvas | FakeElement>(child: T): T {
         this.children.push(child);
         if (child instanceof FakeCanvas) this.canvas = child;
-        else if (child instanceof FakeButton) this.button = child;
+        // The control owns more than one button now, and every test that says "the button" means the
+        // fullscreen one, so the field keeps meaning that.
+        else if (child instanceof FakeButton && child.className.includes('fullscreen')) this.button = child;
         return child;
     }
     /** The live menu panel, if the control has one open. */

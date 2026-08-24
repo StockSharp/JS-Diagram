@@ -752,6 +752,13 @@ export interface DiagramOptions {
     /** Show the built-in top-right fullscreen request button. Defaults to true. */
     showFullscreenButton?: boolean;
     /**
+     * Show a button that asks the host to save the diagram. Defaults to false: the control writes
+     * no files, so the button is worth showing only where a host listens for `exportRequested`.
+     */
+    showDownloadButton?: boolean;
+    /** Tooltip/aria text for that button. Defaults to English. */
+    downloadLabel?: string;
+    /**
      * Show the built-in context menu on right-click. Defaults to true, because the control
      * suppresses the browser's own menu regardless. Turn it off to draw your own from
      * `contextMenuRequested`, which is emitted either way.
@@ -1200,6 +1207,11 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     selectPort(nodeId: string, direction: PortDirection, portId: string): void;
     resize(width: number, height: number): void;
     isFullscreen(): boolean;
+    /** Shows or hides the button that asks the host to save the diagram. */
+    setDownloadButtonVisible(visible: boolean): void;
+    isDownloadButtonVisible(): boolean;
+    /** Text of the download button, for a host that renders in another language. */
+    setDownloadLabel(label: string): void;
     setFullscreenButtonVisible(visible: boolean): void;
     isFullscreenButtonVisible(): boolean;
     /** Text of the fullscreen button, for a host that renders in another language. */
@@ -1478,7 +1490,7 @@ export interface DrawSurface {
 
 // FILE: embed.d.ts
 import { StockSharpDiagram } from './diagram/stocksharp-diagram.js';
-import type { FullscreenRequestedPayload } from './diagram/api.js';
+import type { ExportRequestedPayload, FullscreenRequestedPayload } from './diagram/api.js';
 export interface DiagramEmbedSchemeNode {
     id: string;
     typeId: string;
@@ -1504,6 +1516,11 @@ export interface DiagramEmbedHandle {
 }
 export interface DiagramEmbedOptions {
     onFullscreenRequested?: (request: FullscreenRequestedPayload, handle: DiagramEmbedHandle) => void;
+    /**
+     * Called when the reader asks for the diagram to be saved. The control writes no files; a host that
+     * passes this gets the button, and does the saving itself.
+     */
+    onExportRequested?: (request: ExportRequestedPayload, handle: DiagramEmbedHandle) => void;
     onDestroyed?: (handle: DiagramEmbedHandle) => void;
 }
 export declare function renderScheme(div: HTMLElement, paletteUrl: string, scheme: DiagramEmbedScheme, options?: DiagramEmbedOptions): Promise<DiagramEmbedHandle | null>;
@@ -1605,6 +1622,7 @@ export interface DesignerI18n {
     ctxHelp?: string;
     fullscreenEnter?: string;
     fullscreenExit?: string;
+    download?: string;
     embedErrorLoad?: string;
     embedErrorEmpty?: string;
     embedErrorDraw?: string;

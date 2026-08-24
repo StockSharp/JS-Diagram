@@ -95,6 +95,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private readonly div: HTMLElement;
     private readonly catalog: StockSharpCatalog;
     private readonly fullscreenButton: HTMLButtonElement;
+    // Built only where a host asked for it: a control nobody asked to save gets no button at all.
+    private downloadButton: HTMLButtonElement | null = null;
     private readonly overviewContainer: HTMLElement | null;
     private readonly zoomLabel: HTMLElement | null;
     private readonly canvas: CanvasDiagram;
@@ -108,6 +110,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private destroyed = false;
     private fullscreen = false;
     private fullscreenButtonVisible = true;
+    private downloadButtonVisible = false;
+    private downloadLabel: string | null = null;
     // null means the host never named the button, so its wording comes from the shared bundle.
     // Keeping the two apart is what lets an explicit label win while an untouched control still
     // follows the page's language instead of being stuck in English.
@@ -133,6 +137,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.prepareFullscreenButtonHost();
         this.fullscreenButton = this.createFullscreenButton();
         this.updateFullscreenButton();
+        this.downloadLabel = options.downloadLabel ?? null;
+        this.setDownloadButtonVisible(options.showDownloadButton ?? false);
         this.setContextMenuEnabled(options.showContextMenu ?? true);
         // The keyboard is an entry point like the menu and the toolbar, so it goes through the
         // same undo()/redo() -- which respect enableUndo/enableRedo and emit undoRequested.
@@ -442,6 +448,34 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return this.fullscreen;
     }
 
+    /** Shows or hides the button that asks the host to save the diagram. */
+    setDownloadButtonVisible(visible: boolean): void {
+        this.downloadButtonVisible = visible;
+
+        if (!visible) {
+            if (this.downloadButton === null) return;
+
+            this.downloadButton.hidden = true;
+            this.downloadButton.style.display = 'none';
+            return;
+        }
+
+        this.downloadButton ??= this.createDownloadButton();
+        this.updateDownloadButton();
+        this.downloadButton.hidden = false;
+        this.downloadButton.style.display = 'inline-flex';
+    }
+
+    isDownloadButtonVisible(): boolean {
+        return this.downloadButtonVisible;
+    }
+
+    /** Text of the download button, for a host that renders in another language. */
+    setDownloadLabel(label: string): void {
+        this.downloadLabel = label;
+        this.updateDownloadButton();
+    }
+
     setFullscreenButtonVisible(visible: boolean): void {
         this.fullscreenButtonVisible = visible;
         this.fullscreenButton.hidden = !visible;
@@ -740,6 +774,55 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         button.hidden = !this.fullscreenButtonVisible;
         button.style.display = this.fullscreenButtonVisible ? 'inline-flex' : 'none';
         return button;
+    }
+
+    private createDownloadButton(): HTMLButtonElement {
+        const owner = this.div.ownerDocument ?? document;
+        const button = owner.createElement('button');
+        button.type = 'button';
+        button.className = 'ssdiagram-download-button';
+        button.setAttribute('data-ssdiagram-download-button', '');
+        Object.assign(button.style, {
+            position: 'absolute',
+            top: '8px',
+            right: '46px',
+            zIndex: '4',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '30px',
+            height: '30px',
+            padding: '0',
+            border: '1px solid var(--ssdiagram-control-border, var(--t-border, #3a4250))',
+            borderRadius: '5px',
+            background: 'var(--ssdiagram-control-background, var(--t-surface, rgba(18, 21, 28, 0.9)))',
+            color: 'var(--ssdiagram-control-color, var(--t-text, #eaecef))',
+            boxSizing: 'border-box',
+            cursor: 'pointer',
+            opacity: '0.9',
+        });
+        // The control writes no files: it says the diagram was asked for, and the host saves it.
+        const click = (): void => {
+            this.emit('exportRequested', { format: 'document' });
+        };
+        button.addEventListener('click', click);
+        this.div.appendChild(button);
+        this.disposables.push(() => {
+            button.removeEventListener('click', click);
+            button.remove();
+        });
+        return button;
+    }
+
+    private updateDownloadButton(): void {
+        if (this.downloadButton === null) return;
+
+        const label = this.downloadLabel ?? t('download', 'Download');
+        this.downloadButton.title = label;
+        this.downloadButton.setAttribute('aria-label', label);
+        this.downloadButton.innerHTML = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" '
+            + 'fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" '
+            + 'stroke-linejoin="round"><path d="M12 4v11M8 11l4 4 4-4M5 19h14"/></svg>';
     }
 
     private updateFullscreenButton(): void {

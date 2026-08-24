@@ -19,6 +19,13 @@ export interface DiagramOptions {
     /** Show the built-in top-right fullscreen request button. Defaults to true. */
     showFullscreenButton?: boolean;
     /**
+     * Show a button that asks the host to save the diagram. Defaults to false: the control writes
+     * no files, so the button is worth showing only where a host listens for `exportRequested`.
+     */
+    showDownloadButton?: boolean;
+    /** Tooltip/aria text for that button. Defaults to English. */
+    downloadLabel?: string;
+    /**
      * Show the built-in context menu on right-click. Defaults to true, because the control
      * suppresses the browser's own menu regardless. Turn it off to draw your own from
      * `contextMenuRequested`, which is emitted either way.

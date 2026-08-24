@@ -118,6 +118,7 @@ export interface DesignerI18n {
     // host -- and that override wins; these are the defaults when none was given.
     fullscreenEnter?: string;
     fullscreenExit?: string;
+    download?: string;
     embedErrorLoad?: string;
     embedErrorEmpty?: string;
     embedErrorDraw?: string;

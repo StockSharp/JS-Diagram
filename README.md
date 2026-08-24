@@ -130,6 +130,14 @@ or call `setFullscreenButtonVisible(false)`, to hide the control. The button
 accepts `--ssdiagram-control-background`,
 `--ssdiagram-control-border` and `--ssdiagram-control-color` CSS overrides.
 
+Beside it there is room for a download button, hidden until a host asks for it
+with `showDownloadButton: true` or `setDownloadButtonVisible(true)`. It writes
+nothing either: a press raises `exportRequested` with `format: 'document'`, the
+same request the export menu makes, and the host saves the file. Name it in
+another language with `downloadLabel`, or leave it to the shared bundle. An
+embedded host gets the button by passing `onExportRequested`, and can title it
+through `data-diagram-download`.
+
 Viewport preferences are deliberately separate from the strategy document.
 Persist `diagram.saveViewState()` in host settings and restore it with
 `diagram.loadViewState(value)`. The versioned snapshot contains zoom, pan and
