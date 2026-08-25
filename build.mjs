@@ -30,6 +30,13 @@ const targets = [
         globalName: 'SSDiagram',
     },
     {
+        // Just the renderer, for a host with no browser: a server turning a saved document into a picture
+        // loads this one file and calls SSDiagramHeadless.renderDiagramSvg(document).
+        entryPoints: [join(here, 'src', 'headless.ts')],
+        outfile: join(dist, 'ssdiagram-headless.js'),
+        globalName: 'SSDiagramHeadless',
+    },
+    {
         entryPoints: [join(here, 'examples', 'basic.ts')],
         outfile: join(demoDist, 'demo.js'),
     },

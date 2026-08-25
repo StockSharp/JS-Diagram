@@ -1529,6 +1529,31 @@ export declare function renderFromSource(div: HTMLElement, paletteUrl: string, s
 export declare function renderFromInline(div: HTMLElement, paletteUrl: string, json: string, options?: DiagramEmbedOptions): Promise<DiagramEmbedHandle | null>;
 export declare function renderAll(root?: ParentNode, options?: DiagramEmbedOptions): void;
 
+// FILE: headless.d.ts
+import { type DiagramScreenshotOptions } from './canvas-renderer.js';
+/**
+ * Drawing a diagram where there is no browser -- a server producing a picture for a chat message, an
+ * e-mail or a report. The renderer itself never needed one: it draws through a surface, and the SVG
+ * surface builds a string. What needed a browser was the control around it, which creates a canvas and
+ * listens for pointers; so the few things it reaches for are stood in for here, for the length of one
+ * drawing, and taken away again.
+ *
+ * Text is measured by the SVG surface's own estimate rather than by a real font, so a label's box can sit
+ * a pixel or two off where a browser would put it. The alternative is a native canvas dependency on every
+ * machine that renders, which is a steep price for that.
+ */
+export interface HeadlessRenderOptions extends DiagramScreenshotOptions {
+    /** Width of the frame the drawing is laid out in, in CSS pixels. Defaults to 1200. */
+    hostWidth?: number;
+    /** Height of that frame. Defaults to 800. */
+    hostHeight?: number;
+}
+/**
+ * Draws a saved diagram and returns the SVG for it. The source is the document as text or as an object;
+ * the frame follows the content by default, since a picture made without a viewport has none to crop to.
+ */
+export declare function renderDiagramSvg(source: string | unknown, options?: HeadlessRenderOptions): string;
+
 // FILE: i18n.d.ts
 export interface DesignerI18n {
     panelStrategies?: string;
@@ -1714,6 +1739,8 @@ export declare function t(key: keyof DesignerI18n, fallback: string): string;
 
 // FILE: index.d.ts
 export { DiagramDocumentError, cloneDiagramDocument, createDiagramDocument, parseDiagramDocument, serializeDiagramDocument, } from './core/document.js';
+export { renderDiagramSvg } from './headless.js';
+export type { HeadlessRenderOptions } from './headless.js';
 export { DiagramActionRegistry } from './core/action-registry.js';
 export type { DiagramAction, DiagramActionState, } from './core/action-registry.js';
 export { DiagramCommandHistory } from './core/history.js';

@@ -6,6 +6,9 @@ export {
     serializeDiagramDocument,
 } from './core/document.js';
 
+export { renderDiagramSvg } from './headless.js';
+export type { HeadlessRenderOptions } from './headless.js';
+
 export { DiagramActionRegistry } from './core/action-registry.js';
 export type {
     DiagramAction,
