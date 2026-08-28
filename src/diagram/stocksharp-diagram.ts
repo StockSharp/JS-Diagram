@@ -628,6 +628,17 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         return this.contextMenu !== null;
     }
 
+    /**
+     * Whether the built-in menu is on screen right now.
+     *
+     * The menu closes itself on Escape. A host that binds the same key - to leave a fullscreen
+     * layout, to close its own dialog - needs to know the key was already spoken for, or one
+     * press does both.
+     */
+    isContextMenuOpen(): boolean {
+        return this.contextMenu?.isOpen ?? false;
+    }
+
     getContextCommands(): ContextMenuItemState[] {
         const context = this.contextActionContext();
         const state = (command: ContextCommand): ContextCommandState => {

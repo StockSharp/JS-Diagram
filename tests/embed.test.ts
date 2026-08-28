@@ -122,6 +122,8 @@ class FakeHost {
         this.textContent = '';
     }
     closest(): null { return null; }
+    addEventListener(): void {}
+    removeEventListener(): void {}
     getBoundingClientRect(): DOMRect {
         return { left: 0, top: 0, right: 800, bottom: 480, width: 800, height: 480, x: 0, y: 0, toJSON: () => ({}) };
     }

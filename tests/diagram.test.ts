@@ -73,7 +73,7 @@ class FakeCanvas {
         return [...this.listeners.values()].reduce((total, handlers) => total + handlers.length, 0);
     }
     dispatch(type: string, init: Record<string, unknown>): void {
-        const event = { type, preventDefault: () => undefined, ...init } as unknown as Event;
+        const event = { type, preventDefault: () => undefined, stopPropagation: () => undefined, ...init } as unknown as Event;
         for (const listener of this.listeners.get(type) ?? []) {
             if (typeof listener === 'function') listener(event);
             else listener.handleEvent(event);
@@ -119,7 +119,7 @@ class FakeElement {
         this.listeners.set(type, (this.listeners.get(type) ?? []).filter((handler) => handler !== listener));
     }
     dispatch(type: string, init: Record<string, unknown> = {}): void {
-        const event = { type, target: this, preventDefault: () => undefined, ...init } as unknown as Event;
+        const event = { type, target: this, preventDefault: () => undefined, stopPropagation: () => undefined, ...init } as unknown as Event;
         for (const listener of this.listeners.get(type) ?? []) {
             if (typeof listener === 'function') listener(event);
             else listener.handleEvent(event);
@@ -149,6 +149,24 @@ class FakeHost {
     button: FakeButton | null = null;
     classList = { toggle: () => false, add: () => undefined };
     readonly children: Array<FakeCanvas | FakeElement> = [];
+    private readonly listeners = new Map<string, Array<EventListenerOrEventListenerObject>>();
+
+    addEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+        const handlers = this.listeners.get(type) ?? [];
+        handlers.push(listener);
+        this.listeners.set(type, handlers);
+    }
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void {
+        this.listeners.set(type, (this.listeners.get(type) ?? []).filter((handler) => handler !== listener));
+    }
+    /** A right-click on the control's own chrome reaches the mount element, not the canvas. */
+    dispatch(type: string, init: Record<string, unknown>): void {
+        const event = { type, target: this, preventDefault: () => undefined, stopPropagation: () => undefined, ...init } as unknown as Event;
+        for (const listener of this.listeners.get(type) ?? []) {
+            if (typeof listener === 'function') listener(event);
+            else listener.handleEvent(event);
+        }
+    }
     appendChild<T extends FakeCanvas | FakeElement>(child: T): T {
         this.children.push(child);
         if (child instanceof FakeCanvas) this.canvas = child;
@@ -186,12 +204,36 @@ class FakeWindow {
         return [...this.listeners.values()].reduce((total, handlers) => total + handlers.length, 0);
     }
     dispatch(type: string, init: Record<string, unknown>): void {
-        const event = { type, preventDefault: () => undefined, ...init } as unknown as Event;
+        const event = { type, preventDefault: () => undefined, stopPropagation: () => undefined, ...init } as unknown as Event;
         for (const listener of this.listeners.get(type) ?? []) listener(event);
     }
 }
 
+/// Nothing in the fake DOM lays anything out, so the tests decide when a container changed size.
+class FakeResizeObserver {
+    static readonly live: FakeResizeObserver[] = [];
+    private readonly targets: unknown[] = [];
+
+    constructor(private readonly callback: () => void) {
+        FakeResizeObserver.live.push(this);
+    }
+
+    observe(target: unknown): void { this.targets.push(target); }
+    unobserve(target: unknown): void {
+        const at = this.targets.indexOf(target);
+        if (at >= 0) this.targets.splice(at, 1);
+    }
+    disconnect(): void { this.targets.length = 0; }
+
+    static reset(): void { FakeResizeObserver.live.length = 0; }
+    static fire(target: unknown): void {
+        for (const observer of FakeResizeObserver.live)
+            if (observer.targets.includes(target)) observer.callback();
+    }
+}
+
 function installDom(): FakeWindow {
+    FakeResizeObserver.reset();
     const fakeWindow = new FakeWindow();
     const fakeDocument = Object.assign(new FakeElement(), {
         documentElement: {},
@@ -206,6 +248,7 @@ function installDom(): FakeWindow {
         window: fakeWindow,
         document: fakeDocument,
         requestAnimationFrame: () => 1,
+        ResizeObserver: FakeResizeObserver,
         Image: class {},
         getComputedStyle: () => ({ getPropertyValue: () => '' }),
     });
@@ -3522,14 +3565,220 @@ test('right-clicking the open menu suppresses the browser menu', async () => {
     // A right-click anywhere in the panel reaches its root. The canvas handler cannot help: the
     // menu is mounted beside the canvas, not inside it.
     let prevented = 0;
+    let stopped = 0;
     menu!.dispatch('contextmenu', {
         clientX: 70,
         clientY: 70,
         preventDefault: () => { prevented += 1; },
+        stopPropagation: () => { stopped += 1; },
     });
 
     assert.equal(prevented, 1,
         'the menu let the browser draw its own context menu over ours, because the panel has no contextmenu handler');
+    // The menu is mounted inside the control, which now answers right-clicks on its own chrome.
+    assert.equal(stopped, 1,
+        'the click carried on to the control behind the menu, which reopened the menu somewhere else');
+
+    diagram.destroy();
+});
+
+test('a grow-on-connect anchor is laid out under the sockets it spawned', () => {
+    const { diagram } = makeDiagram();
+    diagram.load([{
+        id: 'source', name: 'Source', x: 20, y: 50,
+        outPorts: [{ id: 'out', name: 'Out', type: 'Decimal' }],
+    }, {
+        id: 'chart', name: 'Chart', x: 300, y: 20,
+        inPorts: [{
+            id: 'values', name: 'Source', type: 'Any', availableTypes: ['Decimal'],
+            isDynamic: true, dynamicMode: 'onConnect',
+        }],
+    }], []);
+
+    assert.equal(diagram.addLink({
+        id: 'first', from: 'source', fromPort: 'out', to: 'chart', toPort: 'values',
+    }), true);
+    assert.equal(diagram.addLink({
+        id: 'second', from: 'source', fromPort: 'out', to: 'chart', toPort: 'values',
+    }), true);
+
+    const renderer = diagram as unknown as {
+        findNode(id: string): { inPorts: Array<{ id: string; cy: number }> } | undefined;
+    };
+    const ports = renderer.findNode('chart')!.inPorts;
+    assert.deepEqual(ports.map((port) => port.id), ['values', 'values_1', 'values_2'],
+        'the scheme keeps recording the anchor first; only its position on screen is at stake');
+
+    const anchor = ports.find((port) => port.id === 'values')!;
+    const spawned = ports.filter((port) => port.id !== 'values');
+    for (const port of spawned)
+        assert.ok(port.cy < anchor.cy,
+            `the empty anchor was drawn at y=${anchor.cy}, above ${port.id} at y=${port.cy}, `
+            + 'so the socket that accepts nothing sits on top of the ones carrying data');
+    assert.ok(spawned[0].cy < spawned[1].cy, 'the spawned sockets must keep the order they were created in');
+});
+
+test('a wildcard input takes the colour of the output wired into it', async () => {
+    installDom();
+    const { DiagramNode, Link, Node, PortType, StockSharpCatalog: Catalog, StockSharpDiagram } =
+        await import('../src/index');
+
+    const catalog = new Catalog();
+    catalog.addPortType(new PortType({ name: 'Candle', color: '#00e0a4' }));
+    catalog.addPortType(new PortType({ name: 'Any', color: '#000000' }));
+    catalog.addNodeType(new Node({ id: 'source-type', name: 'Source' }));
+
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({ div: host as unknown as HTMLElement, catalog });
+    const nodes = [
+        new DiagramNode({
+            id: 'source', typeId: 'source-type', name: 'Source', x: 0, y: 0,
+            outPorts: [{ id: 'out', name: 'Out', type: 'Candle' }],
+        }),
+        new DiagramNode({
+            id: 'chart', typeId: 'source-type', name: 'Chart', x: 300, y: 0,
+            inPorts: [{ id: 'in', name: 'Source', type: 'Any' }],
+        }),
+    ];
+    const shoot = (): string[] => (diagram.takeScreenshot({ scope: 'content', pixelRatio: 1 }) as unknown as {
+        fillStyles: string[];
+    }).fillStyles;
+
+    diagram.load(nodes, []);
+    assert.ok(shoot().includes('#000000'),
+        'baseline broken: an unwired Any socket must show the neutral colour the catalog gives that type');
+
+    diagram.load(nodes, []);
+    assert.equal(
+        diagram.addLink(new Link({ outNode: 'source', outPort: 'out', inNode: 'chart', inPort: 'in' })),
+        true,
+        'baseline broken: a Candle output must be allowed into an Any input',
+    );
+
+    // The Candle output paints itself, so only a second square of that colour is the input.
+    const wired = shoot();
+    assert.ok(wired.filter((fill) => fill === '#00e0a4').length >= 2,
+        'a wired Any socket kept a colour of its own instead of showing what feeds it');
+    assert.ok(!wired.includes('#000000'),
+        'the neutral Any colour is still painted, so the socket did not adopt the source type');
+
+    diagram.destroy();
+});
+
+test('the canvas follows the size of the element it was mounted in', () => {
+    installDom();
+    const host = new FakeHost();
+    // A docking panel that has not been laid out yet: it measures nothing at all.
+    host.clientWidth = 0;
+    host.clientHeight = 0;
+    const diagram = new Diagram({ host: host as unknown as HTMLElement });
+
+    assert.equal(host.canvas!.style.width, '800px',
+        'baseline broken: with nothing to measure the control must open at its own default');
+
+    host.clientWidth = 965;
+    host.clientHeight = 515;
+    FakeResizeObserver.fire(host);
+
+    assert.equal(host.canvas!.style.width, '965px',
+        'the canvas kept its fallback width, so the rest of the panel draws nothing and answers no clicks');
+    assert.equal(host.canvas!.style.height, '515px');
+
+    // A panel switched away from measures zero again, and losing the canvas would lose the view with it.
+    host.clientWidth = 0;
+    host.clientHeight = 0;
+    FakeResizeObserver.fire(host);
+    assert.equal(host.canvas!.style.width, '965px', 'a hidden panel must not shrink the canvas away');
+
+    host.clientWidth = 640;
+    host.clientHeight = 400;
+    diagram.destroy();
+    FakeResizeObserver.fire(host);
+    assert.equal(host.canvas!.style.width, '965px', 'a destroyed control must stop following its container');
+});
+
+test('right-clicking the control chrome opens the menu instead of the browser one', async () => {
+    installDom();
+    const { StockSharpCatalog: Catalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({ div: host as unknown as HTMLElement, catalog: new Catalog() });
+
+    // The control's own fullscreen button covers the top-right corner of the canvas, so a
+    // right-click on it stops at the button and only reaches the element the control was
+    // mounted in - which is what a bubbling contextmenu event looks like here.
+    assert.notEqual(host.button, null, 'baseline broken: the control must draw its fullscreen button');
+    let prevented = 0;
+    host.dispatch('contextmenu', {
+        clientX: 780,
+        clientY: 20,
+        target: host.button,
+        preventDefault: () => { prevented += 1; },
+    });
+
+    assert.notEqual(host.menu(), null,
+        'a right-click on the control own button opened no menu, so the browser drew its own there');
+    assert.equal(prevented, 1, 'the browser menu was left to open over the control');
+
+    diagram.destroy();
+});
+
+test('a right-click during a node drag ends the drag instead of dropping it', () => {
+    const { diagram, host } = makeDiagram();
+    diagram.load([{ id: 'n', name: 'Node', x: 100, y: 100 }], []);
+
+    const renderer = diagram as unknown as {
+        findNode(id: string): { x: number; y: number } | undefined;
+        toScreen(x: number, y: number): [number, number];
+    };
+    const node = renderer.findNode('n')!;
+    const [px, py] = renderer.toScreen(node.x + 20, node.y + 20);
+    host.canvas!.dispatch('pointerdown', {
+        clientX: px, clientY: py, pointerId: 1, pointerType: 'mouse', button: 0,
+        shiftKey: false, ctrlKey: false, metaKey: false, altKey: false,
+    });
+    host.canvas!.dispatch('pointermove', { clientX: px + 60, clientY: py + 40 });
+
+    const dropped = renderer.findNode('n')!;
+    assert.notEqual(dropped.x, 100, 'baseline broken: the drag must have moved the node before the right-click');
+    const movedTo = { x: dropped.x, y: dropped.y };
+
+    let moved = 0;
+    diagram.on('nodeMoved', () => { moved += 1; });
+    host.canvas!.dispatch('contextmenu', { clientX: px + 60, clientY: py + 40 });
+
+    assert.equal(moved, 1, 'the move was never announced, so a host tracking changes never learns of it');
+    assert.equal(diagram.canUndo(), true, 'the move left nothing in the history to undo');
+    diagram.undo();
+    assert.equal(renderer.findNode('n')!.x, 100, 'undo did not put the node back where the drag started');
+    diagram.redo();
+    assert.equal(renderer.findNode('n')!.x, movedTo.x);
+});
+
+test('the control reports whether its menu is open', async () => {
+    installDom();
+    const { DiagramNode, StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+    });
+    diagram.load([new DiagramNode({ id: 'source', name: 'Source', x: 40, y: 40 })], []);
+
+    assert.equal(diagram.isContextMenuOpen(), false);
+
+    host.canvas?.dispatch('contextmenu', { clientX: 60, clientY: 60 });
+    assert.notEqual(host.menu(), null, 'baseline broken: the right-click must open the menu');
+    // A host binds Escape too - to leave fullscreen, to close its own dialog - and without
+    // this it cannot tell that the key was already spoken for.
+    assert.equal(diagram.isContextMenuOpen(), true);
+
+    // Closed the way a user closes it.
+    (globalThis.document as unknown as FakeElement).dispatch('keydown', { key: 'Escape' });
+    assert.equal(host.menu(), null, 'baseline broken: Escape must close the menu');
+    assert.equal(diagram.isContextMenuOpen(), false);
+
+    diagram.setContextMenuEnabled(false);
+    assert.equal(diagram.isContextMenuOpen(), false);
 
     diagram.destroy();
 });

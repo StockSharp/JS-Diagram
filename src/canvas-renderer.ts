@@ -297,6 +297,13 @@ function isWildcardPortType(type: string): boolean {
         || normalized.startsWith('system.object,');
 }
 
+// The empty socket a grow-on-connect input spawns its siblings from. The scheme records it
+// first, but it accepts nothing until something is wired into it, so it belongs under the
+// sockets that do carry data.
+function isGrowAnchor(port: PortModel): boolean {
+    return port.isDynamic && !port.isSibling;
+}
+
 function arePortTypesCompatible(fromType: string, toType: string, availableTypes: readonly string[]): boolean {
     if (isWildcardPortType(fromType) || isWildcardPortType(toType)) return true;
     const normalizedFrom = normalizePortType(fromType);
@@ -569,6 +576,8 @@ export class Diagram {
     private hoverPort: { node: NodeModel; port: PortModel } | null = null;
     private hoverNode: NodeModel | null = null;
     private hoveredLink: LinkModel | null = null;
+    // Type feeding each wired input, keyed by node and port, rebuilt for every frame.
+    private portFeed: ReadonlyMap<PortModel, string> = new Map();
     private tipTimer: ReturnType<typeof setTimeout> | null = null;
     private tipShow = false;
     private tipTarget: PortModel | NodeModel | null = null;
@@ -623,7 +632,21 @@ export class Diagram {
         if (ctx === null) throw new Error('ssdiagram: 2d context unavailable');
         this.ctx = ctx;
         this.resize(this.host.clientWidth || 800, this.host.clientHeight || 480);
+        this.observeHostSize();
         this.bind();
+    }
+
+    /// The control creates the canvas, so it keeps it the size of the element it was mounted in.
+    /// A host that lays its panels out after construction - a docking shell, a tab that opens
+    /// hidden - measures nothing at that point, and the fallback size above would then outlive
+    /// the layout: a strip of the panel that draws nothing and answers no clicks. resize()
+    /// ignores anything smaller than two pixels, so a panel switched away from keeps its view.
+    private observeHostSize(): void {
+        if (typeof ResizeObserver === 'undefined') return;
+
+        const observer = new ResizeObserver(() => this.resize(this.host.clientWidth, this.host.clientHeight));
+        observer.observe(this.host);
+        this.domDisposables.push(() => observer.disconnect());
     }
 
     // ---- events -----------------------------------------------------
@@ -1849,8 +1872,11 @@ export class Diagram {
         // node border).
         const off = PORT_SQ / 2;
         const place = (ports: PortModel[], x: number): void => {
-            const startY = n.y + (n.h - ports.length * PORT_ROW_H) / 2 + PORT_ROW_H / 2;
-            ports.forEach((p, i) => { p.cx = x; p.cy = startY + i * PORT_ROW_H; });
+            const stack = ports.some(isGrowAnchor)
+                ? [...ports.filter((p) => !isGrowAnchor(p)), ...ports.filter(isGrowAnchor)]
+                : ports;
+            const startY = n.y + (n.h - stack.length * PORT_ROW_H) / 2 + PORT_ROW_H / 2;
+            stack.forEach((p, i) => { p.cx = x; p.cy = startY + i * PORT_ROW_H; });
         };
         place(n.inPorts, n.x - off);
         place(n.outPorts, n.x + n.w + off);
@@ -1863,6 +1889,28 @@ export class Diagram {
     private toWorld(sx: number, sy: number): [number, number] {
         return [(sx - this.offX) / this.scale, (sy - this.offY) / this.scale];
     }
+    /// Type of the output wired into each connected input. First link wins, which is the one
+    /// drawn first, so a socket accepting several links agrees with the wire on top.
+    private feedTypes(): Map<PortModel, string> {
+        const feed = new Map<PortModel, string>();
+        for (const l of this.links) {
+            const from = this.findNode(l.from)?.outPorts.find((p) => p.id === l.fromPort);
+            if (from === undefined || isWildcardPortType(from.type)) continue;
+            const to = this.findNode(l.to)?.inPorts.find((p) => p.id === l.toPort);
+            if (to === undefined || feed.has(to)) continue;
+            feed.set(to, from.type);
+        }
+        return feed;
+    }
+
+    /// Colour type of a socket: its own, unless it is a wildcard input with something wired in.
+    /// A wildcard promises to take whatever arrives, so once something has arrived the socket
+    /// shows what that is. An untyped socket ('') promises nothing and keeps its neutral fill.
+    private portFillType(p: PortModel): string {
+        if (p.direction !== 'in' || p.type === '' || !isWildcardPortType(p.type)) return p.type;
+        return this.portFeed.get(p) ?? p.type;
+    }
+
     private portColor(type: string): string {
         const maxL = this.opts.linkMaxLightness;
         const light = maxL !== undefined && maxL < 0.5;
@@ -2208,10 +2256,42 @@ export class Diagram {
         if (this.lpTimer !== null) { clearTimeout(this.lpTimer); this.lpTimer = null; }
         this.lpStart = null;
     }
-    // Hit-test at screen coords and emit a contextMenu event. Cancels
-    // any partial drag/rubber/link gesture that may have started — once
-    // the menu opens we don't want a half-drag racing it.
+    /// Ends a node drag the way releasing the pointer does: the whole multi-node move becomes
+    /// one undo step, and every node that actually moved is announced. Nodes are moved in place
+    /// as the pointer travels, so a caller that clears the drag without coming through here
+    /// leaves them where the drag put them with nothing in the history and the host unaware.
+    private commitNodeDrag(): void {
+        if (this.dragNode === null) return;
+
+        // Capture before/after positions so the whole multi-node
+        // drag is ONE undo step. Skip the action if nothing
+        // actually moved (a "click" that bypassed the threshold).
+        const moves = this.dragStart
+            .map((it) => ({ id: it.n.id, fromX: it.x, fromY: it.y, toX: it.n.x, toY: it.n.y }))
+            .filter((m) => m.fromX !== m.toX || m.fromY !== m.toY);
+        // Announce the same set the undo step records. Emitting for every node the drag
+        // touched reported a move for a plain selection click -- one per selected node --
+        // and a host doing dirty tracking marked the strategy modified for nothing.
+        const moved = new Set(moves.map((m) => m.id));
+        for (const it of this.dragStart) {
+            if (moved.has(it.n.id)) this.emit('nodeMoved', { node: it.n });
+        }
+        this.dragNode = null;
+        this.dragStart = [];
+        if (moves.length > 0) {
+            this.record({
+                do: () => { for (const m of moves) this.doMoveNode(m.id, m.toX, m.toY); },
+                undo: () => { for (const m of moves) this.doMoveNode(m.id, m.fromX, m.fromY); },
+                label: 'drag',
+            });
+        }
+    }
+
+    // Hit-test at screen coords and emit a contextMenu event. Ends whatever gesture was in
+    // flight — once the menu opens we don't want a half-drag racing it — and a node drag ends
+    // properly rather than being dropped, because its nodes have already moved.
     private fireContextMenu(sx: number, sy: number, pageX: number, pageY: number): void {
+        this.commitNodeDrag();
         const [wx, wy] = this.toWorld(sx, sy);
         const port = this.portAt(wx, wy);
         const node = port?.node ?? this.nodeAt(wx, wy);
@@ -2228,7 +2308,13 @@ export class Diagram {
             else if (link !== null && this.selectedLink !== link) this.selectLink(link);
         }
         this.dragNode = null; this.dragStart = []; this.rubber = null;
-        this.panning = false; this.linking = null; this.relinking = null; this.relinkCandidate = null; this.linkSnap = null;
+        this.linking = null; this.relinking = null; this.relinkCandidate = null; this.linkSnap = null;
+        // A pan ends here too, and it ends settled: a host that persists the viewport on the
+        // settled event would otherwise keep the position the pan started from.
+        const viewportMoved = this.panning || this.ovDragging;
+        this.panning = false;
+        this.ovDragging = false;
+        if (viewportMoved) this.emitViewChanged(false);
         // A menu is about to cover this spot, and it opens under a cursor that has not moved --
         // which fires no boundary event, so nothing else would end the hover. Without this the
         // tooltip armed by the last pointermove appears 400ms later, through the open menu.
@@ -2510,30 +2596,7 @@ export class Diagram {
         const finish = (e: MouseEvent | PointerEvent): void => {
             this.cancelLongPress();
             this.relinkCandidate = null;
-            if (this.dragNode !== null) {
-                // Capture before/after positions so the whole multi-node
-                // drag is ONE undo step. Skip the action if nothing
-                // actually moved (a "click" that bypassed the threshold).
-                const moves = this.dragStart
-                    .map((it) => ({ id: it.n.id, fromX: it.x, fromY: it.y, toX: it.n.x, toY: it.n.y }))
-                    .filter((m) => m.fromX !== m.toX || m.fromY !== m.toY);
-                // Announce the same set the undo step records. Emitting for every node the drag
-                // touched reported a move for a plain selection click -- one per selected node --
-                // and a host doing dirty tracking marked the strategy modified for nothing.
-                const moved = new Set(moves.map((m) => m.id));
-                for (const it of this.dragStart) {
-                    if (moved.has(it.n.id)) this.emit('nodeMoved', { node: it.n });
-                }
-                this.dragNode = null;
-                this.dragStart = [];
-                if (moves.length > 0) {
-                    this.record({
-                        do: () => { for (const m of moves) this.doMoveNode(m.id, m.toX, m.toY); },
-                        undo: () => { for (const m of moves) this.doMoveNode(m.id, m.fromX, m.fromY); },
-                        label: 'drag',
-                    });
-                }
-            }
+            this.commitNodeDrag();
             if (this.rubber !== null) {
                 const rx0 = Math.min(this.rubber.x0, this.rubber.x);
                 const ry0 = Math.min(this.rubber.y0, this.rubber.y);
@@ -2626,12 +2689,19 @@ export class Diagram {
             this.zoomToFit();
         });
         // Desktop right-click → same contextMenu event as touch long-press.
-        this.listen(this.canvas, 'contextmenu', (e) => {
+        const openContextMenu = (e: MouseEvent): void => {
             e.preventDefault();
             if (!this.permissions.inspect) return;
             const [sx, sy] = localXY(e);
             this.cancelLongPress();
             this.fireContextMenu(sx, sy, e.clientX, e.clientY);
+        };
+        this.listen(this.canvas, 'contextmenu', openContextMenu);
+        // The control is more than its canvas: its own buttons sit over the corners, and a
+        // right-click on one of those stops at the button, so the browser drew its own menu
+        // there. The canvas keeps its own handler, and this one skips what that already took.
+        this.listen(this.host, 'contextmenu', (e) => {
+            if (e.target !== this.canvas) openContextMenu(e);
         });
         // Two-finger pinch → uniform zoom around the initial midpoint
         // between the fingers. Mobile analog of mouse wheel.
@@ -2781,6 +2851,7 @@ export class Diagram {
             }
         }
         if (options.transient && (this.linking !== null || this.relinking !== null)) this.drawPendingLink();
+        this.portFeed = this.feedTypes();
         for (const n of this.nodes) this.drawNode(n, options.selection && this.selectedNodes.has(n), options);
         if (options.selection && this.permissions.createLinks && this.relinking === null)
             this.drawSelectedLinkEndpoints();
@@ -3049,7 +3120,7 @@ export class Diagram {
         // Single rounded path filled + stroked (aligned, anti-aliased —
         // no half-pixel double edge).
         roundRect(ctx, x, y, s, s, r);
-        ctx.fillStyle = this.portColor(p.type);
+        ctx.fillStyle = this.portColor(this.portFillType(p));
         ctx.fill();
         ctx.lineWidth = magnet ? 1.5 : 1;
         ctx.strokeStyle = magnet ? '#ffffff' : 'rgba(12,12,16,0.55)';

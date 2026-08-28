@@ -128,7 +128,7 @@ export class ContextMenuView {
         // through -- and the canvas listener that suppresses the native menu never sees it,
         // because the menu is not a child of the canvas. Without this the browser drew its own
         // menu on top of ours, leaving two stacked over each other.
-        this.on(root, 'contextmenu', (event) => { event.preventDefault(); });
+        this.on(root, 'contextmenu', (event) => { event.preventDefault(); event.stopPropagation(); });
 
         this.container.appendChild(root);
         this.root = root;
