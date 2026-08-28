@@ -1,0 +1,125 @@
+// Colour arithmetic shared by the parts that have to stay readable against a
+// fill they do not choose: the embed host reading a page's background, and the
+// renderer drawing a title on a node whose colour comes from the scheme.
+
+const CSS_COLOR_KEYWORDS: Readonly<Record<string, [number, number, number]>> = {
+	white: [255, 255, 255],
+	black: [0, 0, 0],
+	transparent: [255, 255, 255],
+};
+
+/**
+ * Channels of a CSS colour, or null when it cannot be read.
+ *
+ * Understands the keywords above, three-, six- and eight-digit hex (the alpha is
+ * ignored), and rgb()/rgba() in both the comma and the space syntax.
+ */
+function parseRgb(color: string): [number, number, number] | null {
+	const value = color.trim().toLowerCase();
+	if (value === '')
+		return null;
+
+	const keyword = CSS_COLOR_KEYWORDS[value];
+	if (keyword !== undefined)
+		return [...keyword];
+
+	const long = value.match(/^#?([0-9a-f]{6})$/);
+	if (long !== null) {
+		const n = parseInt(long[1], 16);
+		return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+	}
+
+	// #abc is shorthand for #aabbcc, and the eight-digit forms carry an alpha we ignore.
+	const short = value.match(/^#?([0-9a-f]{3})([0-9a-f])?$/);
+	if (short !== null) {
+		const [r, g, b] = [...short[1]].map((digit) => parseInt(digit + digit, 16));
+		return [r, g, b];
+	}
+
+	const long8 = value.match(/^#?([0-9a-f]{6})[0-9a-f]{2}$/);
+	if (long8 !== null) {
+		const n = parseInt(long8[1], 16);
+		return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+	}
+
+	const rgb = value.match(/^rgba?\(([^)]+)\)$/);
+	if (rgb !== null) {
+		const parts = rgb[1].split(/[\s,/]+/).filter((part) => part !== '');
+		if (parts.length >= 3) {
+			const [r, g, b] = parts.slice(0, 3).map((part) => part.endsWith('%')
+				? (parseFloat(part) / 100) * 255
+				: parseFloat(part));
+			if ([r, g, b].every((channel) => Number.isFinite(channel)))
+				return [r, g, b];
+		}
+	}
+
+	return null;
+}
+
+/**
+ * Perceived brightness of a CSS colour, or -1 when it cannot be read.
+ *
+ * Six-digit hex was the only form understood, and everything else answered 0 -- black. A page
+ * writing --diagram-bg as #fff, white or rgb(255 255 255) therefore had its white canvas
+ * classified as dark and got the dark link palette: near-white wires on a near-white background.
+ * Unreadable is now -1 rather than 0, so the caller can keep its own default instead of being
+ * told the page is black.
+ */
+export function luminance(color: string): number {
+	const rgb = parseRgb(color);
+	if (rgb === null)
+		return -1;
+
+	const [r, g, b] = rgb;
+	return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+const DARK_TEXT = '#1b1b1b';
+const LIGHT_TEXT = '#f5f5f5';
+
+/// One channel on the scale contrast is measured on, where equal steps look
+/// equally different rather than merely being equal numbers.
+function toLinear(channel: number): number {
+	const v = channel / 255;
+	return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+}
+
+/// Relative luminance as WCAG defines it, or -1 for a colour that cannot be read.
+function relativeLuminance(color: string): number {
+	const rgb = parseRgb(color);
+	if (rgb === null)
+		return -1;
+
+	const [r, g, b] = rgb;
+	return 0.2126 * toLinear(r) + 0.7152 * toLinear(g) + 0.0722 * toLinear(b);
+}
+
+/// WCAG contrast ratio between two relative luminances: 1 for identical, 21 for
+/// black against white.
+function contrast(a: number, b: number): number {
+	const [lighter, darker] = a > b ? [a, b] : [b, a];
+	return (lighter + 0.05) / (darker + 0.05);
+}
+
+/// Title colour for a body filled with `fill`.
+///
+/// A node's fill comes from the scheme rather than the theme, so it can be any
+/// colour, and a title fixed to one shade disappears as soon as a node is filled
+/// close to it. Rather than split the range at a brightness someone has to pick,
+/// this measures both candidates against the fill and takes whichever stands out
+/// more. That is also why a saturated orange keeps its dark title where a plain
+/// brightness test, which reads such a colour as darker than it looks, flips it.
+///
+/// A fill this cannot read keeps the dark title: every node shipped so far is
+/// light, so guessing light text would fail on more of them than it fixes.
+export function readableTextOn(fill: string): string {
+	const background = relativeLuminance(fill);
+	if (background < 0)
+		return DARK_TEXT;
+
+	return contrast(background, relativeLuminance(LIGHT_TEXT))
+		> contrast(background, relativeLuminance(DARK_TEXT))
+		? LIGHT_TEXT
+		: DARK_TEXT;
+}

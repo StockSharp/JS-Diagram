@@ -416,6 +416,19 @@ export declare class Diagram {
 export declare const version = "0.1.0";
 export {};
 
+// FILE: color.d.ts
+/**
+ * Perceived brightness of a CSS colour, or -1 when it cannot be read.
+ *
+ * Six-digit hex was the only form understood, and everything else answered 0 -- black. A page
+ * writing --diagram-bg as #fff, white or rgb(255 255 255) therefore had its white canvas
+ * classified as dark and got the dark link palette: near-white wires on a near-white background.
+ * Unreadable is now -1 rather than 0, so the caller can keep its own default instead of being
+ * told the page is black.
+ */
+export declare function luminance(color: string): number;
+export declare function readableTextOn(fill: string): string;
+
 // FILE: core/action-registry.d.ts
 export interface DiagramAction<TId extends string, TContext> {
     readonly id: TId;

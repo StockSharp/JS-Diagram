@@ -1,5 +1,6 @@
 import type { DrawSurface } from './draw-surface.js';
 import { SvgSurface } from './svg-surface.js';
+import { readableTextOn } from './color.js';
 // Internal dependency-free canvas renderer used by StockSharpDiagram.
 //
 // Dependency-free, pure 2D canvas. Demonstrates the hard parts: typed
@@ -3016,10 +3017,14 @@ export class Diagram {
             const img = this.getIcon(n.icon);
             if (img) { try { ctx.drawImage(img, n.x + 8, n.y + (n.h - iconW) / 2, iconW, iconW); } catch { /* undecodable */ } }
         }
-        // Bold title centred on the light body (nudged right when an icon shows so
-        // they don't overlap); ports are bare colour squares on the edges.
+        // Bold title centred on the body (nudged right when an icon shows so they
+        // don't overlap); ports are bare colour squares on the edges. The title
+        // takes its colour from the fill it sits on: that fill comes from the
+        // scheme, so a node may well be darker than the title used to assume.
         const titleShift = n.icon ? iconW + 4 : 0;
-        ctx.fillStyle = hasLoadError ? '#ffffff' : '#1b1b1b';
+        ctx.fillStyle = hasLoadError
+            ? '#ffffff'
+            : readableTextOn(active ? '#ffd1dc' : n.color);
         ctx.font = '600 12px Segoe UI, Tahoma, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
