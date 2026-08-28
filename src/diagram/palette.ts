@@ -252,6 +252,10 @@ export class StockSharpPalette extends EventEmitter<PaletteEvents> {
             this.emit('nodeActivated', { node: item.clone() });
         });
         li.addEventListener('contextmenu', (event) => {
+            // Only take the browser's menu away if something is going to replace it. The
+            // palette has no menu of its own, so suppressing it unconditionally left the
+            // gesture inert for a host that does not draw one: nothing happened at all.
+            if (!this.hasHandlers('contextMenuRequested')) return;
             event.preventDefault();
             this.selectNodeType(item.id);
             this.emit('contextMenuRequested', {

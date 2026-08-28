@@ -288,3 +288,24 @@ test('the default palette group heading comes from the i18n bridge', () => {
         delete (fakeWindow as unknown as { __designerI18n?: unknown }).__designerI18n;
     }
 });
+
+test('right-click keeps the browser menu when nothing is going to replace it', () => {
+    // The palette takes the native menu away so a host can draw its own. A host that draws
+    // none leaves the gesture inert: no menu of ours, none of the browser's, nothing at all.
+    installDom();
+    const catalog = new StockSharpCatalog();
+    catalog.addNodeType(new Node({ id: 'SMA', name: 'Simple Moving Average', groupName: 'Indicators' }));
+    const host = new FakeElement('div');
+    const palette = new StockSharpPalette({ div: host as unknown as HTMLElement, catalog });
+
+    const unheard = item(host, 'SMA').dispatch('contextmenu', { clientX: 5, clientY: 6 });
+    assert.equal(unheard.defaultPrevented, false,
+        'the native menu was suppressed with nothing to put in its place');
+
+    const seen: string[] = [];
+    palette.on('contextMenuRequested', ({ node }) => seen.push(node.id));
+    const heard = item(host, 'SMA').dispatch('contextmenu', { clientX: 5, clientY: 6 });
+
+    assert.equal(heard.defaultPrevented, true, 'a host that draws a menu still needs the native one gone');
+    assert.deepEqual(seen, ['SMA']);
+});
