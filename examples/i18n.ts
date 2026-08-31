@@ -145,6 +145,8 @@ const EN = {
     portOrder: 'Order',
     portTrade: 'Trade',
     portAnyObject: 'Any object',
+    portAny: 'Any',
+    portText: 'Text',
 } as const;
 
 export type DemoStrings = Record<keyof typeof EN, string>;
@@ -248,6 +250,8 @@ const ZH: DemoStrings = {
     portOrder: '订单',
     portTrade: '成交',
     portAnyObject: '任意对象',
+    portAny: '任意',
+    portText: '文本',
 };
 
 const DICTIONARIES: Record<DemoLanguage, DemoStrings> = { en: EN, zh: ZH };

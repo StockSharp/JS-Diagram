@@ -1,6 +1,6 @@
 import type { DrawSurface } from './draw-surface.js';
 import { SvgSurface } from './svg-surface.js';
-import { readableTextOn } from './color.js';
+import { readableOutlineOn, readableTextOn } from './color.js';
 // Internal dependency-free canvas renderer used by StockSharpDiagram.
 //
 // Dependency-free, pure 2D canvas. Demonstrates the hard parts: typed
@@ -518,6 +518,8 @@ function colorLuminance(color: string | undefined): number {
 }
 
 export class Diagram {
+    /// Outline every socket is edged with, refreshed from the background each draw.
+    private portOutline = readableOutlineOn('#1b1b1f');
     private readonly host: HTMLElement;
     private readonly canvas: HTMLCanvasElement;
     // Typed as the surface, not the context: the on-screen path still passes the browser's own
@@ -2799,8 +2801,12 @@ export class Diagram {
     private draw(options: DiagramRenderOptions = SCREEN_RENDER_OPTIONS): void {
         const ctx = this.ctx;
         ctx.clearRect(0, 0, this.width, this.height);
-        ctx.fillStyle = this.opts.background ?? '#1b1b1f';
+        const background = this.opts.background ?? '#1b1b1f';
+        ctx.fillStyle = background;
         ctx.fillRect(0, 0, this.width, this.height);
+        // Read here rather than per socket: an export swaps the background for the duration of
+        // one draw, so this is the only point that sees the colour the sockets land on.
+        this.portOutline = readableOutlineOn(background);
         // Entrance animation — scheme rises from below + fades in over
         // the opaque background.
         let introDy = 0;
@@ -3123,7 +3129,7 @@ export class Diagram {
         ctx.fillStyle = this.portColor(this.portFillType(p));
         ctx.fill();
         ctx.lineWidth = magnet ? 1.5 : 1;
-        ctx.strokeStyle = magnet ? '#ffffff' : 'rgba(12,12,16,0.55)';
+        ctx.strokeStyle = magnet ? '#ffffff' : this.portOutline;
         ctx.stroke();
         const runtimeSelected = runtime?.selected === true || (options.selection && this.selectedPort?.port === p);
         const breakpoint = runtime?.breakpoint === true;

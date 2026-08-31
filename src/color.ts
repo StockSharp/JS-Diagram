@@ -123,3 +123,29 @@ export function readableTextOn(fill: string): string {
 		? LIGHT_TEXT
 		: DARK_TEXT;
 }
+
+// Opaque on purpose: a translucent edge takes part of its colour from the fill underneath, so
+// two sockets side by side end up with visibly different edges and the one rule looks like two.
+const DARK_OUTLINE = '#3a3d45';
+const LIGHT_OUTLINE = '#c8ccd4';
+
+/// Outline colour for a shape drawn on `surface`.
+///
+/// A socket is filled with its type's colour, which comes from the host and spans the whole
+/// range -- StockSharp sends #000000 for Any. What the outline has to separate the socket
+/// from is the canvas, so it is measured against the canvas: one outline for every socket on
+/// it, and none of them left without an edge. Choosing per fill instead would edge two
+/// neighbouring sockets differently, which reads as a mistake rather than as a rule.
+///
+/// A surface this cannot read keeps the dark outline, for the same reason the title stays
+/// dark: the canvas shipped so far is dark, and a light outline on a light one would vanish.
+export function readableOutlineOn(surface: string): string {
+	const background = relativeLuminance(surface);
+	if (background < 0)
+		return DARK_OUTLINE;
+
+	return contrast(background, relativeLuminance(LIGHT_OUTLINE))
+		> contrast(background, relativeLuminance(DARK_OUTLINE))
+		? LIGHT_OUTLINE
+		: DARK_OUTLINE;
+}

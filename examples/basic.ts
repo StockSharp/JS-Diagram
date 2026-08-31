@@ -48,6 +48,11 @@ const catalog = new StockSharpCatalog();
     new PortType({ name: 'Order', color: 'hsl(350, 69%, 62%)' }),
     new PortType({ name: 'Trade', color: 'hsl(153, 67%, 49%)' }),
     new PortType({ name: 'Object', color: 'hsl(215, 16%, 62%)' }),
+    // The two ends of the range, the way a host really sends them: StockSharp colours Any
+    // black. A socket has to stay visible on both canvases at both ends, so the demo carries
+    // them to show the outline flipping with the fill.
+    new PortType({ name: 'Any', color: '#000000' }),
+    new PortType({ name: 'Text', color: '#ffffff' }),
 ].forEach((type) => catalog.addPortType(type));
 
 // Built from the current dictionary rather than from literals: node types are host data, so a
@@ -121,6 +126,8 @@ function nodeTypes(): Node[] {
                 { id: 'candles', name: s.portCandles, type: 'Candle' },
                 { id: 'trades', name: s.portTrade, type: 'Trade' },
                 { id: 'object', name: s.portAnyObject, type: 'Object' },
+                { id: 'any', name: s.portAny, type: 'Any' },
+                { id: 'text', name: s.portText, type: 'Text' },
             ],
         }),
     ];
