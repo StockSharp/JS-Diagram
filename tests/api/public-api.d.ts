@@ -429,6 +429,8 @@ export {};
 export declare function luminance(color: string): number;
 export declare function readableTextOn(fill: string): string;
 export declare function readableOutlineOn(surface: string): string;
+export declare function legibleOn(color: string, background: string): string;
+export declare function cappedLightness(color: string, maxLightness: number): string;
 
 // FILE: core/action-registry.d.ts
 export interface DiagramAction<TId extends string, TContext> {

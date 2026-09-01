@@ -149,3 +149,85 @@ export function readableOutlineOn(surface: string): string {
 		? LIGHT_OUTLINE
 		: DARK_OUTLINE;
 }
+
+/// A colour's hue, saturation and lightness, or null when it cannot be read.
+function toHsl(color: string): [number, number, number] | null {
+	const hsl = color.trim().match(/^hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)$/i);
+	if (hsl !== null)
+		return [+hsl[1], +hsl[2] / 100, +hsl[3] / 100];
+
+	const rgb = parseRgb(color);
+	if (rgb === null)
+		return null;
+
+	const [r, g, b] = rgb.map((channel) => channel / 255);
+	const max = Math.max(r, g, b);
+	const min = Math.min(r, g, b);
+	const lightness = (max + min) / 2;
+
+	if (max === min)
+		return [0, 0, lightness];
+
+	const span = max - min;
+	const saturation = lightness > 0.5 ? span / (2 - max - min) : span / (max + min);
+	const hue = max === r
+		? ((g - b) / span + (g < b ? 6 : 0))
+		: max === g
+			? (b - r) / span + 2
+			: (r - g) / span + 4;
+
+	return [hue * 60, saturation, lightness];
+}
+
+/// Lightest a colour may be drawn on a light canvas, and darkest on a dark one. Wide enough
+/// that a hue is still itself, narrow enough that neither end of the palette disappears.
+const DARK_CANVAS_FLOOR = 0.42;
+const LIGHT_CANVAS_CEILING = 0.45;
+
+/// The same colour, moved into the band the canvas leaves room for.
+///
+/// A socket type's colour belongs to the host and spans the whole range -- StockSharp sends
+/// #000000 for Any and near-white for Side. As a socket that is fine: it is a filled square
+/// with an outline. As a wire it is a thin line with nothing behind it, so a colour at the
+/// same end of the range as the canvas cannot be seen at all. Only the lightness moves; the
+/// hue and saturation are the host's answer to which type this is, and are left alone.
+///
+/// A colour that already sits in the band is returned exactly as it came, and one that cannot
+/// be read is passed through: guessing at it would be worse than drawing what was asked for.
+export function legibleOn(color: string, background: string): string {
+	const hsl = toHsl(color);
+	if (hsl === null)
+		return color;
+
+	const canvas = relativeLuminance(background);
+	const [hue, saturation, lightness] = hsl;
+	const moved = canvas < 0
+		? lightness
+		: canvas > 0.18
+			? Math.min(lightness, LIGHT_CANVAS_CEILING)
+			: Math.max(lightness, DARK_CANVAS_FLOOR);
+
+	if (moved === lightness && /^hsl/i.test(color.trim()))
+		return color;
+
+	return `hsl(${Math.round(hue * 10) / 10}, ${Math.round(saturation * 1000) / 10}%, ${Math.round(moved * 1000) / 10}%)`;
+}
+
+/// The same colour with its lightness capped at `maxLightness` (0..1), hue and saturation kept.
+///
+/// Any colour, not only one already written as hsl(): a host's palette arrives as hex, and a
+/// ceiling that only understood one notation left exactly those colours uncapped -- so a light
+/// theme darkened the hues the control invents and left the ones it was given.
+///
+/// A colour that cannot be read is returned untouched.
+export function cappedLightness(color: string, maxLightness: number): string {
+	const hsl = toHsl(color);
+	if (hsl === null)
+		return color;
+
+	const [hue, saturation, lightness] = hsl;
+	if (lightness <= maxLightness)
+		return color;
+
+	return `hsl(${Math.round(hue * 10) / 10}, ${Math.round(saturation * 1000) / 10}%, ${Math.round(maxLightness * 1000) / 10}%)`;
+}

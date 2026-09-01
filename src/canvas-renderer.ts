@@ -1,6 +1,6 @@
 import type { DrawSurface } from './draw-surface.js';
 import { SvgSurface } from './svg-surface.js';
-import { readableOutlineOn, readableTextOn } from './color.js';
+import { cappedLightness, legibleOn, readableOutlineOn, readableTextOn } from './color.js';
 // Internal dependency-free canvas renderer used by StockSharpDiagram.
 //
 // Dependency-free, pure 2D canvas. Demonstrates the hard parts: typed
@@ -494,9 +494,7 @@ function hashHue(s: string): number {
 // wash out; a light theme passes a low ceiling to darken the links just enough to stay readable
 // while keeping each hue distinct. Non-hsl inputs are returned untouched.
 function clampLightness(color: string, maxL: number): string {
-    const m = color.match(/^hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)$/i);
-    if (m === null) return color;
-    return `hsl(${m[1]}, ${m[2]}%, ${Math.min(+m[3], maxL * 100)}%)`;
+    return cappedLightness(color, maxL);
 }
 
 function colorLuminance(color: string | undefined): number {
@@ -1913,6 +1911,16 @@ export class Diagram {
         return this.portFeed.get(p) ?? p.type;
     }
 
+    /// A type's colour as a wire.
+    ///
+    /// The same colour a socket of that type is filled with, moved into the band the canvas
+    /// leaves room for. A socket can afford the host's exact colour because it is a filled
+    /// square with an outline; a wire is a thin line with nothing behind it, and one drawn in
+    /// #000000 on a dark canvas is not there at all.
+    private linkColor(type: string): string {
+        return legibleOn(this.portColor(type), this.opts.background ?? '#1b1b1f');
+    }
+
     private portColor(type: string): string {
         const maxL = this.opts.linkMaxLightness;
         const light = maxL !== undefined && maxL < 0.5;
@@ -2836,7 +2844,7 @@ export class Diagram {
             if (a === null || b === null) continue;
             const fp = this.nodes.find((n) => n.id === l.from)?.outPorts.find((p) => p.id === l.fromPort);
             const baseColor = (this.opts.typedLinkColors ?? false) && fp !== undefined
-                ? this.portColor(fp.type)
+                ? this.linkColor(fp.type)
                 : this.portColor('');
             const state = options.selection && l === this.selectedLink
                 ? 'sel'
@@ -3294,7 +3302,7 @@ export class Diagram {
         }
         if (snapped !== null) excludedNodes.add(snapped.node.id);
         const points = this.routeLink(a, b, excludedNodes);
-        ctx.strokeStyle = this.portColor(colorType);
+        ctx.strokeStyle = this.linkColor(colorType);
         if (snapped !== null) { ctx.setLineDash([]); ctx.lineWidth = 2.6; }
         else { ctx.setLineDash([5, 4]); ctx.lineWidth = 2; }
         ctx.beginPath();
