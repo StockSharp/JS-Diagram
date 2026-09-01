@@ -184,7 +184,7 @@ test('demo toolbar and component requests share the fullscreen overlay', async (
 
 test('node properties change live input and output connection policies', async ({ page }) => {
     await page.goto('/demo/index.html');
-    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 8 links');
+    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 9 links');
     const canvas = page.locator('#diagram canvas');
 
     const nodePoint = async (nodeId: string): Promise<[number, number]> => page.evaluate((id) => {
@@ -240,9 +240,9 @@ test('node properties change live input and output connection policies', async (
     await page.locator('#indicatorForm button[type="submit"]').click();
 
     await dragPort('slow', 'value', 'fast', 'source');
-    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 9 links');
+    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 10 links');
     await dragPort('fast', 'value', 'chart', 'object');
-    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 9 links');
+    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 10 links');
     await expect(page.locator('#status')).toHaveText('Rejected: the output does not allow another wire.');
 
     await openFastProperties();
@@ -251,7 +251,7 @@ test('node properties change live input and output connection policies', async (
     await page.locator('#indicatorOutputMulti').check();
     await page.locator('#indicatorForm button[type="submit"]').click();
     await dragPort('fast', 'value', 'chart', 'object');
-    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 10 links');
+    await expect(page.locator('#modelStats')).toHaveText('7 nodes · 11 links');
 });
 
 test('component can be destroyed without leaving its canvas behind', async ({ page }) => {
