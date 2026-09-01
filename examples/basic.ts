@@ -69,7 +69,13 @@ function nodeTypes(): Node[] {
             description: s.nodeMarketDataDesc,
             groupName: s.grpSources,
             icon: svgIcon('MD', '#4aa3ff'),
-            outPorts: [{ id: 'candles', name: s.portCandles, type: 'Candle' }],
+            outPorts: [
+                { id: 'candles', name: s.portCandles, type: 'Candle' },
+                // The dark end of the palette, as something a wire can be dragged out of:
+                // Any is #000000, and a wire drawn in it is the case the canvas has to leave
+                // room for.
+                { id: 'any', name: s.portAny, type: 'Any' },
+            ],
         }),
         new Node({
             id: 'sma',
@@ -143,6 +149,10 @@ const diagram = new StockSharpDiagram({
     // The demo saves what the control asks for, so it shows the button that asks.
     showDownloadButton: true,
 });
+// Wires carry their socket type's colour, which is what makes the ends of the palette
+// visible as wires rather than only as sockets.
+diagram.setTheme({ typedLinkColors: true });
+
 (window as Window & { stockSharpDiagramDemo?: StockSharpDiagram }).stockSharpDiagramDemo = diagram;
 
 palette.on('nodeActivated', ({ node: activated }) => {
@@ -190,6 +200,7 @@ const seedLinks = (): Link[] => [
     new Link({ outNode: 'market', outPort: 'candles', inNode: 'fast', inPort: 'source' }),
     new Link({ outNode: 'market', outPort: 'candles', inNode: 'slow', inPort: 'source' }),
     new Link({ outNode: 'market', outPort: 'candles', inNode: 'chart', inPort: 'candles' }),
+    new Link({ outNode: 'market', outPort: 'any', inNode: 'chart', inPort: 'any' }),
     new Link({ outNode: 'fast', outPort: 'value', inNode: 'cross', inPort: 'fast' }),
     new Link({ outNode: 'slow', outPort: 'value', inNode: 'cross', inPort: 'slow' }),
     new Link({ outNode: 'cross', outPort: 'signal', inNode: 'orders', inPort: 'signal' }),
