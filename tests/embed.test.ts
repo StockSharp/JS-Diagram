@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { createDiagramDocument } from '../src/core/document';
+import type { ContextCommandGroupState } from '../src/diagram/api';
 import {
     destroyRenderedDiagram,
     renderAll,
+    renderDocument,
     renderFromSource,
     renderScheme,
+    type DiagramEmbedHandle,
     type DiagramEmbedScheme,
 } from '../src/embed';
 
@@ -571,4 +575,218 @@ test('a shorthand --diagram-bg is read as the light canvas it names', async () =
 
     assert.equal(await lightnessFor('#fff'), 0.42,
         'shorthand #fff scored luminance 0, so a white canvas is classified as dark and draws near-invisible links');
+});
+
+// ---- generic documents: an architecture drawing rather than a strategy ----
+
+const architecture = createDiagramDocument({
+    nodes: [
+        { id: 'gate', name: 'Gateway', subtitle: 'FIX / REST', color: 'var(--ss-red, #c0392b)', outPorts: [{ id: 'out', name: 'Out' }] },
+        { id: 'core', name: 'Matching', x: 400, inPorts: [{ id: 'in', name: 'In' }] },
+    ],
+    links: [{ from: { nodeId: 'gate', portId: 'out' }, to: { nodeId: 'core', portId: 'in' }, label: 'SBE' }],
+    zones: [{ id: 'colo', name: 'Colocation', x: -40, y: -40, width: 700, height: 200 }],
+});
+
+/** A host that holds its document inline, the way a page writes it into the markup. */
+class InlineHost extends FakeHost {
+    constructor(private readonly json: string) { super(); }
+    querySelector(selector: string): { textContent: string } | null {
+        return selector === 'script[type="application/json"]' ? { textContent: this.json } : null;
+    }
+}
+
+function canvasOf(host: FakeHost): FakeCanvas {
+    return host.children.find((child): child is FakeCanvas => child instanceof FakeCanvas)!;
+}
+
+test('renderDocument draws a generic document as a read-only viewer that leaves the page its scroll', () => {
+    const requested: string[] = [];
+    installDom(async (input) => { requested.push(String(input)); return paletteResponse(); });
+    const host = new FakeHost();
+
+    const handle = renderDocument(host as unknown as HTMLElement, architecture);
+
+    assert.equal(requested.length, 0, 'a generic document names its own nodes; there is no palette to fetch');
+    assert.equal(host.dataset.rendered, '1');
+    const saved = handle.diagram.saveDocument();
+    assert.deepEqual(saved.nodes.map((node) => node.subtitle ?? ''), ['FIX / REST', '']);
+    assert.equal(saved.links[0].label, 'SBE');
+    assert.equal(saved.zones[0].id, 'colo');
+    assert.equal(handle.diagram.getInteractionPermissions().moveNodes, false);
+    assert.equal(handle.diagram.getViewState().overviewVisible, false);
+    assert.equal(handle.diagram.isPageScrollEnabled(), true);
+    assert.equal(canvasOf(host).style.touchAction, 'pan-y');
+    assert.equal(FakeResizeObserver.instances.some((observer) => !observer.disconnected), true);
+
+    handle.destroy();
+    assert.equal(host.dataset.rendered, undefined);
+});
+
+test('renderDocument lets a host keep the wheel for zooming', () => {
+    installDom(async () => paletteResponse());
+    const host = new FakeHost();
+
+    const handle = renderDocument(host as unknown as HTMLElement, architecture, { pageScroll: false });
+
+    assert.equal(handle.diagram.isPageScrollEnabled(), false);
+    assert.equal(canvasOf(host).style.touchAction, 'none');
+    handle.destroy();
+});
+
+test('renderDocument accepts the document as text and refuses one that is not a document', () => {
+    installDom(async () => paletteResponse());
+    const host = new FakeHost();
+
+    const handle = renderDocument(host as unknown as HTMLElement, JSON.stringify(architecture));
+    assert.equal(handle.diagram.saveDocument().nodes.length, 2);
+    handle.destroy();
+
+    assert.throws(() => renderDocument(new FakeHost() as unknown as HTMLElement, '{"version":99,"nodes":[],"links":[]}'), /version/);
+});
+
+test('a document embed forwards export and fullscreen requests like a strategy embed', () => {
+    installDom(async () => paletteResponse());
+    const host = new FakeHost();
+    const asked: string[] = [];
+    let fullscreen = 0;
+
+    const handle = renderDocument(host as unknown as HTMLElement, architecture, {
+        onExportRequested: ({ format }) => { asked.push(format); },
+        onFullscreenRequested: () => { fullscreen += 1; },
+    });
+
+    assert.equal(handle.diagram.isDownloadButtonVisible(), true);
+    host.children.find((child): child is FakeButton => child instanceof FakeButton && child.className.includes('download'))!.dispatch('click');
+    host.children.find((child): child is FakeButton => child instanceof FakeButton && child.className.includes('fullscreen'))!.dispatch('click');
+    assert.deepEqual(asked, ['document']);
+    assert.equal(fullscreen, 1);
+    handle.destroy();
+});
+
+test('a host can turn the export action off, by option or by attribute', () => {
+    installDom(async () => paletteResponse());
+    const exportGroup = (handle: DiagramEmbedHandle) => handle.diagram.getContextCommands()
+        .find((item): item is ContextCommandGroupState => 'group' in item && item.group === 'export')!;
+
+    const byOption = renderDocument(new FakeHost() as unknown as HTMLElement, architecture, {
+        onExportRequested: () => assert.fail('export was turned off'),
+        allowExport: false,
+    });
+    assert.equal(byOption.diagram.isDownloadButtonVisible(), false);
+    assert.equal(byOption.diagram.isExportEnabled(), false);
+    assert.equal(exportGroup(byOption).enabled, false, 'the menu must not offer what the host turned off');
+    assert.equal(byOption.diagram.executeContextCommand('exportPng'), false);
+    byOption.destroy();
+
+    const attributed = new FakeHost();
+    attributed.dataset.diagramExport = 'off';
+    const byAttribute = renderDocument(attributed as unknown as HTMLElement, architecture, {
+        onExportRequested: () => assert.fail('export was turned off'),
+    });
+    assert.equal(byAttribute.diagram.isDownloadButtonVisible(), false);
+    assert.equal(exportGroup(byAttribute).enabled, false);
+    byAttribute.destroy();
+
+    const scheme = new FakeHost();
+    scheme.dataset.diagramExport = 'off';
+    return renderScheme(scheme as unknown as HTMLElement, '/palette.json', emptyScheme, { onExportRequested: () => undefined })
+        .then((handle) => {
+            assert.equal(handle!.diagram.isDownloadButtonVisible(), false, 'the attribute means the same on a strategy embed');
+            handle!.destroy();
+        });
+});
+
+test('renderAll sends a host marked as a document to the document viewer', async () => {
+    const requested: string[] = [];
+    installDom((async (input: RequestInfo | URL) => { requested.push(String(input)); return paletteResponse(); }) as unknown as typeof fetch);
+    const host = new InlineHost(JSON.stringify(architecture));
+    host.dataset.diagramKind = 'document';
+
+    renderAll({ querySelectorAll: () => [host] } as unknown as ParentNode);
+    await settle();
+
+    assert.equal(host.dataset.rendered, '1');
+    assert.deepEqual(requested, [], 'a document host must not wait on the strategy palette');
+    assert.equal(canvasOf(host).style.touchAction, 'pan-y');
+    destroyRenderedDiagram(host as unknown as HTMLElement);
+});
+
+test('a document written by hand into the page needs only what has no default', async () => {
+    installDom(async () => paletteResponse());
+    const host = new InlineHost(JSON.stringify({
+        nodes: [
+            { id: 'a', name: 'Client', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'Gateway', x: 300, inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [{ from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, label: 'FIX' }],
+    }));
+    host.dataset.diagramKind = 'document';
+
+    renderAll({ querySelectorAll: () => [host] } as unknown as ParentNode);
+    await settle();
+
+    assert.equal(host.classList.contains('ss-diagram-error'), false, `the host fell back to its note: ${host.textContent}`);
+    assert.equal(host.dataset.rendered, '1');
+    destroyRenderedDiagram(host as unknown as HTMLElement);
+
+    const direct = renderDocument(new FakeHost() as unknown as HTMLElement, { nodes: [{ id: 'a', name: 'A' }] });
+    assert.equal(direct.diagram.saveDocument().nodes[0].name, 'A');
+    direct.destroy();
+});
+
+test('renderAll recognises a document by its shape when the host does not say', async () => {
+    installDom((async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/architecture.json') return { ok: true, text: async () => JSON.stringify(architecture) } as Response;
+        throw new Error(`Unexpected URL: ${url}`);
+    }) as unknown as typeof fetch);
+    const host = new FakeHost();
+    host.dataset.diagramSrc = '/architecture.json';
+
+    renderAll({ querySelectorAll: () => [host] } as unknown as ParentNode);
+    await settle();
+
+    assert.equal(host.dataset.rendered, '1');
+    assert.equal(host.classList.contains('ss-diagram-error'), false);
+    assert.equal(canvasOf(host).style.touchAction, 'pan-y');
+    destroyRenderedDiagram(host as unknown as HTMLElement);
+});
+
+test('a malformed or empty document degrades to the inline note', async () => {
+    installDom(async () => paletteResponse());
+    const broken = new InlineHost('{"version":1,"nodes":[{"id":""}],"links":[]}');
+    broken.dataset.diagramKind = 'document';
+    const empty = new InlineHost(JSON.stringify(createDiagramDocument({})));
+    empty.dataset.diagramKind = 'document';
+
+    renderAll({ querySelectorAll: () => [broken, empty] } as unknown as ParentNode);
+    await settle();
+
+    for (const host of [broken, empty]) {
+        assert.equal(host.textContent, 'Diagram is empty or malformed.');
+        assert.equal(host.classList.contains('ss-diagram-error'), true);
+        assert.notEqual(host.dataset.rendered, '1');
+    }
+});
+
+test('a strategy scheme host is still drawn from the palette', async () => {
+    const requested: string[] = [];
+    installDom((async (input: RequestInfo | URL) => {
+        const url = String(input);
+        requested.push(url);
+        if (url === '/data/designer-palette.json') return paletteResponse();
+        throw new Error(`Unexpected URL: ${url}`);
+    }) as unknown as typeof fetch);
+    const host = new InlineHost(JSON.stringify({
+        Content: { Value: { Scheme: { Model: { Nodes: [{ Key: 'node', TypeId: 'whatever', X: 10, Y: 20 }], Links: [] } } } },
+    }));
+
+    renderAll({ querySelectorAll: () => [host] } as unknown as ParentNode);
+    await settle();
+
+    assert.deepEqual(requested, ['/data/designer-palette.json']);
+    assert.equal(host.dataset.rendered, '1');
+    assert.equal(canvasOf(host).style.touchAction, 'none', 'the strategy embed keeps its gestures unless asked');
+    destroyRenderedDiagram(host as unknown as HTMLElement);
 });

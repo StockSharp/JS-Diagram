@@ -177,6 +177,89 @@ option and `setFullscreenLabels()` on `StockSharpDiagram`. With neither the
 attribute nor the option, the wording comes from the bundle, so a page that has
 already been translated needs no per-diagram markup at all.
 
+Two more attributes change what a host is rather than what it says:
+`data-diagram-kind="document"` marks a generic diagram document (see
+*Architecture diagrams* below), and `data-diagram-export="off"` removes the
+download button and the export entries for that one diagram, the same as the
+`allowExport: false` option.
+
+### Architecture diagrams: generic documents
+
+The same engine draws pictures that are not strategies - a system architecture,
+a data flow, a deployment - from a generic diagram document. Such a document
+names its own nodes, colours and zones, so it needs no palette:
+
+```ts
+import { createDiagramDocument, renderDocument } from '@stocksharp/diagram';
+
+const drawing = createDiagramDocument({
+  nodes: [
+    {
+      id: 'gate', name: 'Gateway', subtitle: 'FIX / REST / WebSocket',
+      description: 'Shown as the hover tooltip',
+      color: 'var(--ss-red, #c0392b)', border: 'var(--ss-red-dark, #7a1f16)',
+      x: 0, y: 0, outPorts: [{ id: 'out', name: 'Orders' }],
+    },
+    { id: 'core', name: 'Matching engine', x: 420, y: 0, inPorts: [{ id: 'in', name: 'Orders' }] },
+  ],
+  links: [{
+    from: { nodeId: 'gate', portId: 'out' },
+    to: { nodeId: 'core', portId: 'in' },
+    label: 'SBE',          // short text at the middle of the routed wire
+    style: 'dashed',       // 'solid' (default) or 'dashed'
+  }],
+  zones: [{ id: 'colo', name: 'Colocation', x: -60, y: -60, width: 760, height: 200, color: 'var(--ss-gold)' }],
+});
+
+const handle = renderDocument(document.querySelector<HTMLElement>('#architecture')!, drawing);
+```
+
+- `subtitle` is an optional second line under the node name, smaller and
+  muted; the node grows to fit it. `label` is an optional short text drawn on a
+  plate of the canvas colour at the middle of the link. Both are left out of a
+  saved document when empty, so documents written before them keep their shape.
+- Zones count as content: `zoomToFit()` and `takeScreenshot` / `takeSvg` with
+  `scope: 'content'` frame every zone and its caption, not only the nodes.
+- Node `color` / `border` and zone `color` may name a page token -
+  `var(--ss-red)`, with or without a fallback. It is resolved against the element
+  the diagram is mounted in on every repaint, so the picture follows the page's
+  theme; the saved document keeps the reference, and an SVG export carries the
+  resolved colour. A token that is unset and has no fallback gets the default
+  node, border or zone colour.
+
+`renderDocument(div, document, options)` mounts a read-only viewer: no minimap,
+no link validation, the canvas and grid colours read from `--diagram-bg` /
+`--diagram-grid` on the page (repainted when `data-theme` changes on `<html>`,
+which also re-reads every token colour), and a `ResizeObserver` that keeps the
+drawing fitted. It accepts a saved document or one written by hand, leaving out
+whatever has a default, and throws `DiagramDocumentError` for anything else. It
+takes the same `onFullscreenRequested`, `onExportRequested` and `onDestroyed`
+hooks as `renderScheme`, plus:
+
+- `pageScroll` - on by default for a document: a plain wheel scrolls the page and
+  only Ctrl/Meta+wheel (and a trackpad pinch) zooms; on touch screens a
+  one-finger vertical swipe scrolls the page (`touch-action: pan-y`), while a
+  horizontal drag pans the diagram and a two-finger pinch zooms it. Pass `false`
+  to keep every gesture in the diagram. `StockSharpDiagram` has the same switch
+  as the `pageScroll` option and `setPageScroll()`; it is off there by default.
+- `allowExport: false` - no download button and no export entries in the menu,
+  even when `onExportRequested` is passed (`StockSharpDiagram.setExportEnabled()`
+  underneath).
+
+Pages that use `renderAll()` mark such a host with `data-diagram-kind="document"`
+and give it the document inline or through `data-diagram-src`. A host without
+the attribute is still recognised when its JSON has a numeric `version` and a
+`nodes` array at the root, which a saved strategy never has; strategy hosts are
+drawn exactly as before.
+
+```html
+<div class="ss-diagram-host" data-diagram-kind="document" data-diagram-export="off">
+  <script type="application/json">
+    { "nodes": [{ "id": "a", "name": "Client", "subtitle": "FIX" }], "links": [] }
+  </script>
+</div>
+```
+
 ### Node actions and errors
 
 Double-click handling is opt-in. Give only the node types controlled by the
@@ -354,7 +437,7 @@ The component has one document model and a separate rendering layer:
 | Document core | `src/core/*` | Versioned document serialization plus independent runtime, view and selection state |
 | Public component API | `src/diagram/stocksharp-diagram.ts` | `StockSharpDiagram`: catalog-aware nodes, ports, validation, events, persistence, history and theming |
 | Models and palette | `src/diagram/{types,catalog,palette}.ts` | Public data model and draggable HTML element palette |
-| Web embed | `src/embed.ts` | Self-contained read-only rendering for web applications |
+| Web embed | `src/embed.ts` | Self-contained read-only rendering of strategy schemes and generic documents for web applications |
 | Canvas renderer | `src/canvas-renderer.ts` | Internal drawing, routing, selection, editing, zoom, touch and overview |
 
 Applications use `StockSharpDiagram` or the read-only embed. The renderer is

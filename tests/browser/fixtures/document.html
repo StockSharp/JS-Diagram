@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Document embed fixture</title>
+  <link rel="stylesheet" href="document.css">
+</head>
+<body>
+  <div class="fixture-spacer"></div>
+  <div id="direct" class="fixture-host"></div>
+  <div id="discovered" class="ss-diagram-host fixture-host" data-diagram-kind="document">
+    <script type="application/json">
+      {
+        "version": 1,
+        "nodes": [
+          { "id": "a", "name": "Client", "subtitle": "FIX", "outPorts": [{ "id": "out", "name": "Out" }] },
+          { "id": "b", "name": "Gateway", "x": 320, "inPorts": [{ "id": "in", "name": "In" }] }
+        ],
+        "links": [{ "from": { "nodeId": "a", "portId": "out" }, "to": { "nodeId": "b", "portId": "in" }, "label": "FIX" }]
+      }
+    </script>
+  </div>
+  <div class="fixture-tail"></div>
+  <script src="/dist/ssdiagram.js"></script>
+  <script src="document.js"></script>
+</body>
+</html>

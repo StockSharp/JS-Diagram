@@ -1263,6 +1263,13 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     isFullscreen(): boolean;
     /** Shows or hides the button that asks the host to save the diagram. */
     setDownloadButtonVisible(visible: boolean): void;
+    /**
+     * Turns the export commands of the context menu on or off. Off, the menu offers them greyed out and
+     * `executeContextCommand` refuses them, for a page that does not want its diagram saved. The
+     * download button is separate: hide it with `setDownloadButtonVisible(false)`.
+     */
+    setExportEnabled(enabled: boolean): void;
+    isExportEnabled(): boolean;
     isDownloadButtonVisible(): boolean;
     /** Text of the download button, for a host that renders in another language. */
     setDownloadLabel(label: string): void;
@@ -1553,6 +1560,7 @@ export interface DrawSurface {
 // FILE: embed.d.ts
 import { StockSharpDiagram } from './diagram/stocksharp-diagram.js';
 import type { ExportRequestedPayload, FullscreenRequestedPayload } from './diagram/api.js';
+import type { DiagramDocument, DiagramDocumentInput } from './core/model.js';
 export interface DiagramEmbedSchemeNode {
     id: string;
     typeId: string;
@@ -1584,8 +1592,28 @@ export interface DiagramEmbedOptions {
      */
     onExportRequested?: (request: ExportRequestedPayload, handle: DiagramEmbedHandle) => void;
     onDestroyed?: (handle: DiagramEmbedHandle) => void;
+    /**
+     * Leave page scrolling to the page: a plain wheel scrolls it, Ctrl/Meta+wheel zooms the diagram, and
+     * a one-finger vertical swipe scrolls it on touch screens. Defaults to true for a document and to
+     * false for a strategy scheme.
+     */
+    pageScroll?: boolean;
+    /**
+     * False turns saving off for this diagram: no download button and no export entries in the menu,
+     * even when `onExportRequested` is passed. A host element says the same with
+     * `data-diagram-export="off"`. Defaults to true.
+     */
+    allowExport?: boolean;
 }
 export declare function renderScheme(div: HTMLElement, paletteUrl: string, scheme: DiagramEmbedScheme, options?: DiagramEmbedOptions): Promise<DiagramEmbedHandle | null>;
+/**
+ * Draws a generic diagram document - an architecture or data-flow picture rather than a strategy - as a
+ * read-only viewer. The document names its own nodes, colours and zones, so no palette is fetched. It may
+ * be a saved document or one written by hand, leaving out whatever has a default (the version included).
+ * Page scrolling stays with the page unless `pageScroll: false` is passed. Throws DiagramDocumentError
+ * when the source is not a document; the discovery helpers degrade to an inline note instead.
+ */
+export declare function renderDocument(div: HTMLElement, source: DiagramDocument | DiagramDocumentInput | string, options?: DiagramEmbedOptions): DiagramEmbedHandle;
 export declare function destroyRenderedDiagram(div: HTMLElement): boolean;
 export declare function renderFromSource(div: HTMLElement, paletteUrl: string, srcUrl: string, options?: DiagramEmbedOptions): Promise<DiagramEmbedHandle | null>;
 export declare function renderFromInline(div: HTMLElement, paletteUrl: string, json: string, options?: DiagramEmbedOptions): Promise<DiagramEmbedHandle | null>;
@@ -1822,8 +1850,8 @@ export { PALETTE_DRAG_MIME, StockSharpPalette, } from './diagram/palette.js';
 export type { PaletteContextMenuPayload, PaletteEvents, PaletteNodePayload, PaletteOptions, PaletteSelectionChangedPayload, } from './diagram/palette.js';
 export { DiagramNode, Link, Node, Port, PortType, } from './diagram/types.js';
 export type { DiagramNodeInit, LinkEndpoint, LinkInit, NodeData, NodeInit, PaletteGroupData, PaletteNodeData, ParamSchema, PortData, PortDirection, PortInit, PortUpdate, PortTypeInit, } from './diagram/types.js';
-export { destroyRenderedDiagram, renderAll, renderFromInline, renderFromSource, renderScheme, } from './embed.js';
-export type { DiagramEmbedHandle, DiagramEmbedScheme, DiagramEmbedSchemeLink, DiagramEmbedSchemeNode, } from './embed.js';
+export { destroyRenderedDiagram, renderAll, renderFromInline, renderDocument, renderFromSource, renderScheme, } from './embed.js';
+export type { DiagramEmbedHandle, DiagramEmbedOptions, DiagramEmbedScheme, DiagramEmbedSchemeLink, DiagramEmbedSchemeNode, } from './embed.js';
 
 // FILE: svg-surface.d.ts
 import type { DrawSurface } from './draw-surface.js';

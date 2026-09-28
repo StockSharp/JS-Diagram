@@ -3,18 +3,19 @@ import { luminance } from './color.js';
 // Shared read-only diagram embed layer. Rendering, palette loading and theming
 // live next to the diagram engine so web applications do not copy that logic.
 //
-// renderScheme draws a scheme supplied by the caller. renderAll,
-// renderFromSource and renderFromInline discover .ss-diagram-host elements and
-// load a schema from a URL or embedded JSON. Every failure degrades to a short
-// inline note instead of throwing.
+// renderScheme draws a strategy scheme supplied by the caller, renderDocument a
+// generic diagram document. renderAll, renderFromSource and renderFromInline
+// discover .ss-diagram-host elements and load either from a URL or embedded
+// JSON. Every failure degrades to a short inline note instead of throwing.
 // StockSharpDiagram uses the canvas renderer directly, so this module is
 // self-contained and uses the same public component as the editor.
 import { StockSharpDiagram } from './diagram/stocksharp-diagram.js';
 import { StockSharpCatalog } from './diagram/catalog.js';
 import { DiagramNode, Link, Node, Port, PortType } from './diagram/types.js';
 import type { ExportRequestedPayload, FullscreenRequestedPayload } from './diagram/api.js';
-import { toPortDynamicMode } from './core/model.js';
-import type { PortDynamicMode } from './core/model.js';
+import { DiagramDocumentError, createDiagramDocument } from './core/document.js';
+import { DIAGRAM_DOCUMENT_VERSION, toPortDynamicMode } from './core/model.js';
+import type { DiagramDocument, DiagramDocumentInput, PortDynamicMode } from './core/model.js';
 
 interface PalettePort {
 	key: string;
@@ -68,6 +69,18 @@ export interface DiagramEmbedOptions {
 		handle: DiagramEmbedHandle,
 	) => void;
 	onDestroyed?: (handle: DiagramEmbedHandle) => void;
+	/**
+	 * Leave page scrolling to the page: a plain wheel scrolls it, Ctrl/Meta+wheel zooms the diagram, and
+	 * a one-finger vertical swipe scrolls it on touch screens. Defaults to true for a document and to
+	 * false for a strategy scheme.
+	 */
+	pageScroll?: boolean;
+	/**
+	 * False turns saving off for this diagram: no download button and no export entries in the menu,
+	 * even when `onExportRequested` is passed. A host element says the same with
+	 * `data-diagram-export="off"`. Defaults to true.
+	 */
+	allowExport?: boolean;
 }
 
 const PALETTE_URL = '/data/designer-palette.json';
@@ -329,22 +342,94 @@ async function renderSchemeAtRevision(
 		return null;
 	const catalog = buildCatalog(palette);
 
+	return mountDiagram(div, catalog, options, false, (diagram) => {
+		const missingTypeTemplate = div.dataset.diagramMissingElement
+			?? t('embedMissingElement', 'Element type "{typeId}" is missing from the palette.');
+		const converted = toDiagramNodes(
+			scheme,
+			catalog,
+			(typeId) => missingTypeTemplate.replace('{typeId}', typeId || '(empty)'),
+		);
+		diagram.load(
+			converted.nodes,
+			scheme.links.map((link) => new Link({
+				outNode: link.from,
+				outPort: link.fromPort,
+				inNode: link.to,
+				inPort: link.toPort,
+			})),
+			{ nodeErrors: converted.nodeErrors },
+		);
+	});
+}
+
+/**
+ * Draws a generic diagram document - an architecture or data-flow picture rather than a strategy - as a
+ * read-only viewer. The document names its own nodes, colours and zones, so no palette is fetched. It may
+ * be a saved document or one written by hand, leaving out whatever has a default (the version included).
+ * Page scrolling stays with the page unless `pageScroll: false` is passed. Throws DiagramDocumentError
+ * when the source is not a document; the discovery helpers degrade to an inline note instead.
+ */
+export function renderDocument(
+	div: HTMLElement,
+	source: DiagramDocument | DiagramDocumentInput | string,
+	options: DiagramEmbedOptions = {},
+): DiagramEmbedHandle {
+	const parsed = readDocument(source);
+	beginRender(div);
+	return mountDocument(div, parsed, options);
+}
+
+// A document written into a page by hand leaves out what has a default, which the strict reader for
+// saved files refuses; the builder fills those in and checks everything else the same way.
+function readDocument(source: unknown): DiagramDocument {
+	let value = source;
+	if (typeof source === 'string') {
+		try {
+			value = JSON.parse(source) as unknown;
+		} catch (error) {
+			throw new DiagramDocumentError(error instanceof Error ? error.message : 'invalid JSON');
+		}
+	}
+	if (!isRecord(value))
+		throw new DiagramDocumentError('expected an object');
+	if (value.version !== undefined && value.version !== DIAGRAM_DOCUMENT_VERSION)
+		throw new DiagramDocumentError(`unsupported document version ${String(value.version)}`, '$.version');
+	// The builder validates every element it is handed, so the cast only names the shape it checks.
+	return createDiagramDocument(value as DiagramDocumentInput);
+}
+
+function mountDocument(div: HTMLElement, source: DiagramDocument, options: DiagramEmbedOptions): DiagramEmbedHandle {
+	return mountDiagram(div, new StockSharpCatalog(), options, true, (diagram) => diagram.loadDocument(source));
+}
+
+// Everything a read-only embed shares, whatever it draws: the control, its theme, its size, its
+// buttons and its disposal. `populate` puts the content in.
+function mountDiagram(
+	div: HTMLElement,
+	catalog: StockSharpCatalog,
+	options: DiagramEmbedOptions,
+	pageScrollByDefault: boolean,
+	populate: (diagram: StockSharpDiagram) => void,
+): DiagramEmbedHandle {
 	disposeActiveRender(div);
 	div.classList.remove('ss-diagram-error');
 	div.replaceChildren();
 	// The host page passes its wording the same way it passes the error texts: through the dataset,
 	// "enter|exit". Left out, the button keeps its English defaults.
 	const [enterLabel, exitLabel] = (div.dataset.diagramFullscreen ?? '').split('|');
-	// The download button appears only where a host listens for the request; its wording comes the same
-	// way as the rest, and its absence leaves the button hidden.
+	// The download button appears only where a host listens for the request and has not turned export
+	// off; its wording comes the same way as the rest, and its absence leaves the button hidden.
 	const downloadLabel = div.dataset.diagramDownload;
-	const showDownloadButton = options.onExportRequested !== undefined;
+	const exportAllowed = options.allowExport !== false && div.dataset.diagramExport !== 'off';
+	const showDownloadButton = exportAllowed && options.onExportRequested !== undefined;
 
 	let diagram: StockSharpDiagram;
 	try {
 		diagram = new StockSharpDiagram({
 			div,
 			catalog,
+			pageScroll: options.pageScroll ?? pageScrollByDefault,
 			...(enterLabel && exitLabel ? { fullscreenLabels: { enter: enterLabel, exit: exitLabel } } : {}),
 			...(showDownloadButton ? { showDownloadButton: true } : {}),
 			...(downloadLabel ? { downloadLabel } : {}),
@@ -389,7 +474,9 @@ async function renderSchemeAtRevision(
 	activeRenders.set(div, handle);
 	connectedRenders.add(handle);
 	ensureDisconnectedHostObserver();
-	if (options.onExportRequested !== undefined) {
+	if (!exportAllowed) {
+		diagram.setExportEnabled(false);
+	} else if (options.onExportRequested !== undefined) {
 		const notifyHost = options.onExportRequested;
 		cleanups.push(diagram.on('exportRequested', (request) => notifyHost(request, handle)));
 	}
@@ -401,7 +488,8 @@ async function renderSchemeAtRevision(
 
 	try {
 		// Follow the site theme: the canvas colour comes from the live --diagram-bg CSS token; a theme toggle
-		// repaints it. Nodes are self-contained light-grey boxes, so only the canvas behind them is themed.
+		// repaints it. The repaint also re-reads every var(--token) colour the content names, so nodes and
+		// zones written in the page's tokens follow the switch too.
 		const applyDiagramTheme = () => {
 			const cs = getComputedStyle(document.documentElement);
 			const bg = cs.getPropertyValue('--diagram-bg').trim() || '#1b1b1f';
@@ -421,23 +509,7 @@ async function renderSchemeAtRevision(
 
 		diagram.setLinkValidator(() => true);
 		diagram.setOverviewVisible(false);
-		const missingTypeTemplate = div.dataset.diagramMissingElement
-			?? t('embedMissingElement', 'Element type "{typeId}" is missing from the palette.');
-		const converted = toDiagramNodes(
-			scheme,
-			catalog,
-			(typeId) => missingTypeTemplate.replace('{typeId}', typeId || '(empty)'),
-		);
-		diagram.load(
-			converted.nodes,
-			scheme.links.map((link) => new Link({
-				outNode: link.from,
-				outPort: link.fromPort,
-				inNode: link.to,
-				inPort: link.toPort,
-			})),
-			{ nodeErrors: converted.nodeErrors },
-		);
+		populate(diagram);
 
 		const fit = () => {
 			if (!div.isConnected) {
@@ -562,6 +634,9 @@ export async function renderFromSource(
 		return null;
 	}
 
+	if (holdsDocument(div, raw))
+		return drawDocumentAtRevision(div, raw, revision, options, errors);
+
 	const scheme = parseRawScheme(raw);
 	if (scheme.nodes.length === 0) {
 		note(div, errors.empty, revision);
@@ -596,6 +671,9 @@ export async function renderFromInline(
 		return null;
 	}
 
+	if (holdsDocument(div, raw))
+		return drawDocumentAtRevision(div, raw, revision, options, errors);
+
 	const scheme = parseRawScheme(raw);
 	if (scheme.nodes.length === 0) {
 		note(div, errors.empty, revision);
@@ -610,9 +688,49 @@ export async function renderFromInline(
 	}
 }
 
+// A host says it holds a generic document with data-diagram-kind="document". Without the attribute the
+// shape decides: a document carries a numeric version and a node array at its root, which a saved
+// strategy (Content.Value.Scheme.Model) never does.
+function holdsDocument(div: HTMLElement, raw: unknown): boolean {
+	if (div.dataset.diagramKind === 'document')
+		return true;
+	return isRecord(raw) && typeof raw.version === 'number' && Array.isArray(raw.nodes);
+}
+
+function drawDocumentAtRevision(
+	div: HTMLElement,
+	raw: unknown,
+	revision: number,
+	options: DiagramEmbedOptions,
+	errors: EmbedErrorTexts,
+): DiagramEmbedHandle | null {
+	if (renderRevisions.get(div) !== revision)
+		return null;
+
+	let parsed: DiagramDocument;
+	try {
+		parsed = readDocument(raw);
+	} catch {
+		note(div, errors.empty, revision);
+		return null;
+	}
+	if (parsed.nodes.length === 0 && parsed.zones.length === 0) {
+		note(div, errors.empty, revision);
+		return null;
+	}
+
+	try {
+		return mountDocument(div, parsed, options);
+	} catch {
+		note(div, errors.draw, revision);
+		return null;
+	}
+}
+
 // Render every not-yet-rendered diagram host under root (default: the whole document). Callable again after
 // dynamic HTML is injected (e.g. the editor preview) to draw hosts that just appeared. A host either points
-// at a source URL (data-diagram-src) or embeds its schema JSON inline (a <script type="application/json">).
+// at a source URL (data-diagram-src) or embeds its JSON inline (a <script type="application/json">); the
+// JSON is a strategy scheme or, marked by data-diagram-kind="document" or by its shape, a generic document.
 export function renderAll(root: ParentNode = document, options: DiagramEmbedOptions = {}): void {
 	root.querySelectorAll<HTMLElement>('.ss-diagram-host').forEach((host) => {
 		if (host.dataset.rendered === '1')

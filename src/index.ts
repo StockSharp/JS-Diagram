@@ -179,12 +179,14 @@ export {
     destroyRenderedDiagram,
     renderAll,
     renderFromInline,
+    renderDocument,
     renderFromSource,
     renderScheme,
 } from './embed.js';
 
 export type {
     DiagramEmbedHandle,
+    DiagramEmbedOptions,
     DiagramEmbedScheme,
     DiagramEmbedSchemeLink,
     DiagramEmbedSchemeNode,

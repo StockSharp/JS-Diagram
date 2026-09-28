@@ -1,0 +1,22 @@
+/* The tokens a site would define: the canvas colours the embed reads, and one it lets nodes name. */
+:root {
+  --diagram-bg: #131820;
+  --diagram-grid: #1e2633;
+  --fixture-node: #c0392b;
+}
+
+:root[data-theme="light"] {
+  --diagram-bg: #f5f7fa;
+  --diagram-grid: #e2e8f0;
+  --fixture-node: #2e86de;
+}
+
+html, body {
+  margin: 0;
+  background: var(--diagram-bg);
+}
+
+/* Room above and below the diagrams, so the page has something to scroll. */
+.fixture-spacer { height: 200px; }
+.fixture-tail { height: 2400px; }
+.fixture-host { width: 900px; height: 460px; }

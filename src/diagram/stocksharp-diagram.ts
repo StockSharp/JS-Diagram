@@ -111,6 +111,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private fullscreen = false;
     private fullscreenButtonVisible = true;
     private downloadButtonVisible = false;
+    private exportEnabled = true;
     private downloadLabel: string | null = null;
     // null means the host never named the button, so its wording comes from the shared bundle.
     // Keeping the two apart is what lets an explicit label win while an untouched control still
@@ -474,6 +475,19 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.updateDownloadButton();
         this.downloadButton.hidden = false;
         this.downloadButton.style.display = 'inline-flex';
+    }
+
+    /**
+     * Turns the export commands of the context menu on or off. Off, the menu offers them greyed out and
+     * `executeContextCommand` refuses them, for a page that does not want its diagram saved. The
+     * download button is separate: hide it with `setDownloadButtonVisible(false)`.
+     */
+    setExportEnabled(enabled: boolean): void {
+        this.exportEnabled = enabled;
+    }
+
+    isExportEnabled(): boolean {
+        return this.exportEnabled;
     }
 
     isDownloadButtonVisible(): boolean {
@@ -1015,15 +1029,15 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             // picture, and an empty diagram has none to give. They stay on in read-only mode,
             // which forbids changing the diagram, not looking at it.
             exportDocument: {
-                canExecute: ({ document }) => document.nodes.length > 0,
+                canExecute: ({ document }) => this.exportEnabled && document.nodes.length > 0,
                 execute: () => this.emit('exportRequested', { format: 'document' }),
             },
             exportPng: {
-                canExecute: ({ document }) => document.nodes.length > 0,
+                canExecute: ({ document }) => this.exportEnabled && document.nodes.length > 0,
                 execute: () => this.emit('exportRequested', { format: 'png' }),
             },
             exportSvg: {
-                canExecute: ({ document }) => document.nodes.length > 0,
+                canExecute: ({ document }) => this.exportEnabled && document.nodes.length > 0,
                 execute: () => this.emit('exportRequested', { format: 'svg' }),
             },
             // Always available: it shows the overview as readily as it hides it, and an empty
