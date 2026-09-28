@@ -1,6 +1,6 @@
 import type { DrawSurface } from './draw-surface.js';
 import { SvgSurface } from './svg-surface.js';
-import { cappedLightness, legibleOn, readableOutlineOn, readableTextOn } from './color.js';
+import { cappedLightness, legibleOn, readableOutlineOn, readableTextOn, resolveCssVariables } from './color.js';
 // Internal dependency-free canvas renderer used by StockSharpDiagram.
 //
 // Dependency-free, pure 2D canvas. Demonstrates the hard parts: typed
@@ -488,6 +488,9 @@ const INTRO_MS = 520;        // entrance animation duration
 const INTRO_RISE = 70;       // px the scheme rises from below
 const ERROR_FLASH_MS = 1100;
 const ERROR_RED = '#f6465d';
+const DEFAULT_NODE_COLOR = '#d7d7d7';
+const DEFAULT_NODE_BORDER = '#8c8c8c';
+const DEFAULT_ZONE_TINT = '#8a8f98';
 const TITLE_FONT = '600 12px Segoe UI, Tahoma, sans-serif';
 const SUBTITLE_FONT = '11px Segoe UI, Tahoma, sans-serif';
 const SUBTITLE_MIN_H = 62;   // body height that fits a name and a subtitle line
@@ -615,6 +618,9 @@ export class Diagram {
 
     private validator: LinkValidator | null = null;
     private handlers = new Map<EvName, Set<(p: never) => void>>();
+    // Computed style of the host, read at most once per frame: colours written as var(--token)
+    // resolve against it, so a frame drawn after a theme switch picks up the new values.
+    private hostStyle: CSSStyleDeclaration | null = null;
 
     constructor(opts: DiagramOptions) {
         this.opts = opts;
@@ -2848,6 +2854,7 @@ export class Diagram {
     }
     private draw(options: DiagramRenderOptions = SCREEN_RENDER_OPTIONS): void {
         const ctx = this.ctx;
+        this.hostStyle = null;
         ctx.clearRect(0, 0, this.width, this.height);
         const background = this.opts.background ?? '#1b1b1f';
         ctx.fillStyle = background;
@@ -3054,8 +3061,9 @@ export class Diagram {
 
         const ctx = this.ctx;
 
+        const defaultTint = this.resolveColor(this.opts.zoneColor ?? DEFAULT_ZONE_TINT, DEFAULT_ZONE_TINT);
         for (const zone of this.zones) {
-            const tint = zone.color.length > 0 ? zone.color : (this.opts.zoneColor ?? '#8a8f98');
+            const tint = zone.color.length > 0 ? this.resolveColor(zone.color, defaultTint) : defaultTint;
             ctx.save();
             roundRect(ctx, zone.x, zone.y, zone.width, zone.height, 10);
             ctx.globalAlpha = 0.12;
@@ -3114,12 +3122,12 @@ export class Diagram {
         const runtime = options.runtime ? getJsonKey(this.runtimeState.nodes, n.id) : undefined;
         const active = options.runtime
             && (this.runtimeState.activeNodeId === n.id || runtime?.active === true);
-        const fill = n.color;
+        const fill = this.resolveColor(n.color, DEFAULT_NODE_COLOR);
         roundRect(ctx, n.x, n.y, n.w, n.h, 6);
         ctx.fillStyle = hasLoadError ? ERROR_BACKGROUND : active ? '#ffd1dc' : fill;
         ctx.fill();
         ctx.lineWidth = selected ? 2 : 1.5;
-        ctx.strokeStyle = selected ? this.selectionColor() : n.border;
+        ctx.strokeStyle = selected ? this.selectionColor() : this.resolveColor(n.border, DEFAULT_NODE_BORDER);
         ctx.stroke();
         if (hasLoadError || hasRuntimeError) {
             let alpha = 1;
@@ -3321,6 +3329,24 @@ export class Diagram {
         ctx.fillText(text, x, y);
         ctx.restore();
     }
+    // Scheme colours may name a custom property of the page, var(--token), which a canvas cannot
+    // paint. They resolve against the host element; one that resolves to nothing and has no
+    // fallback of its own gets the renderer's default for that slot.
+    private resolveColor(value: string, fallback: string): string {
+        if (!value.includes('var(')) return value;
+        return resolveCssVariables(value, (name) => this.hostProperty(name)) ?? fallback;
+    }
+    private hostProperty(name: string): string {
+        if (this.hostStyle === null) {
+            if (typeof getComputedStyle !== 'function') return '';
+            try {
+                this.hostStyle = getComputedStyle(this.host);
+            } catch {
+                return '';
+            }
+        }
+        return this.hostStyle.getPropertyValue(name);
+    }
     private drawSelectedLinkEndpoints(): void {
         if (this.selectedLink === null) return;
         const ctx = this.ctx;
@@ -3436,9 +3462,9 @@ export class Diagram {
         ctx.stroke();
         ctx.clip();
         for (const n of this.nodes) {
-            ctx.fillStyle = n.color;
+            ctx.fillStyle = this.resolveColor(n.color, DEFAULT_NODE_COLOR);
             ctx.fillRect(mx(n.x), my(n.y), Math.max(2, n.w * s), Math.max(2, n.h * s));
-            ctx.strokeStyle = n.border;
+            ctx.strokeStyle = this.resolveColor(n.border, DEFAULT_NODE_BORDER);
             ctx.lineWidth = 1;
             ctx.strokeRect(mx(n.x), my(n.y), Math.max(2, n.w * s), Math.max(2, n.h * s));
         }

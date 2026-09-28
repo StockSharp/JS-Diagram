@@ -3911,3 +3911,64 @@ test('a zone caption taller than its zone still lands inside the content frame',
     // The caption starts 9px down and is 12px tall.
     assert.ok(height >= 21, `the caption of a thin zone is cut off: the export is only ${height}px tall`);
 });
+
+function withHostTokens(host: FakeHost, tokens: Record<string, string>): void {
+    Object.assign(globalThis, {
+        getComputedStyle: (element: unknown) => ({
+            getPropertyValue: (name: string) => (element === host ? tokens[name] ?? '' : ''),
+        }),
+    });
+}
+
+test('colours named by custom property resolve against the host and follow it when it changes', () => {
+    const { diagram, host } = makeDiagram();
+    const tokens: Record<string, string> = { '--ss-red': '#e0301e', '--ss-edge': ' #7a1010 ', '--zone': 'rgb(1, 2, 3)' };
+    withHostTokens(host, tokens);
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [{ id: 'a', name: 'A', color: 'var(--ss-red)', border: 'var(--ss-edge)' }],
+        zones: [{ id: 'z', name: 'Z', x: -20, y: -20, width: 300, height: 120, color: 'var(--zone)' }],
+    }));
+
+    const first = diagram.takeScreenshot({ includeGrid: false }) as unknown as FakeCanvas;
+    assert.ok(first.fillStyles.includes('#e0301e'), `node fill not resolved: ${JSON.stringify(first.fillStyles)}`);
+    assert.ok(first.strokeStyles.includes('#7a1010'), `node border not resolved: ${JSON.stringify(first.strokeStyles)}`);
+    assert.ok(first.fillStyles.includes('rgb(1, 2, 3)'), `zone tint not resolved: ${JSON.stringify(first.fillStyles)}`);
+    assert.equal([...first.fillStyles, ...first.strokeStyles].some((value) => value.includes('var(')), false,
+        'a canvas cannot paint var(); the reference has to be replaced before it is used');
+
+    // A theme switch changes the token, and the next frame picks the new value up.
+    tokens['--ss-red'] = '#ff8080';
+    const second = diagram.takeScreenshot({ includeGrid: false }) as unknown as FakeCanvas;
+    assert.ok(second.fillStyles.includes('#ff8080'));
+    assert.equal(second.fillStyles.includes('#e0301e'), false);
+
+    // The saved document keeps the reference, not the colour it resolved to.
+    assert.equal(diagram.saveDocument().nodes[0].color, 'var(--ss-red)');
+});
+
+test('an unset custom property falls back to its own fallback, then to the default colour', () => {
+    const { diagram, host } = makeDiagram();
+    withHostTokens(host, {});
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', color: 'var(--missing, #123456)' },
+            { id: 'b', name: 'B', color: 'var(--missing)', border: 'var(--also-missing)', y: 100 },
+        ],
+    }));
+
+    const frame = diagram.takeScreenshot({ includeGrid: false }) as unknown as FakeCanvas;
+    assert.ok(frame.fillStyles.includes('#123456'));
+    assert.ok(frame.fillStyles.includes('#d7d7d7'), 'an unresolvable fill falls back to the default node colour');
+    assert.ok(frame.strokeStyles.includes('#8c8c8c'), 'an unresolvable border falls back to the default border');
+    assert.equal(frame.fillStyles.some((value) => value.includes('var(')), false);
+});
+
+test('an svg export carries the resolved colour, since a standalone file has no page to resolve against', () => {
+    const { diagram, host } = makeDiagram();
+    withHostTokens(host, { '--ss-red': '#e0301e' });
+    diagram.loadDocument(createDiagramDocument({ nodes: [{ id: 'a', name: 'A', color: 'var(--ss-red)' }] }));
+
+    const svg = diagram.takeSvg({ scope: 'content' });
+    assert.match(svg, /fill="#e0301e"/);
+    assert.equal(svg.includes('var('), false);
+});

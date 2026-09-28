@@ -231,3 +231,51 @@ export function cappedLightness(color: string, maxLightness: number): string {
 
 	return `hsl(${Math.round(hue * 10) / 10}, ${Math.round(saturation * 1000) / 10}%, ${Math.round(maxLightness * 1000) / 10}%)`;
 }
+
+/**
+ * Replaces every var(--name) or var(--name, fallback) in a CSS value with what `lookup` returns for the
+ * name, or with the fallback when the name is unset. Nested references resolve too, up to a fixed depth
+ * that also stops a cycle. Null when a reference resolves to nothing and names no fallback: the caller
+ * knows which default suits the slot, this does not.
+ */
+export function resolveCssVariables(value: string, lookup: (name: string) => string): string | null {
+	return resolveAt(value, lookup, 0);
+}
+
+function resolveAt(value: string, lookup: (name: string) => string, depth: number): string | null {
+	const start = value.indexOf('var(');
+	if (start < 0)
+		return value;
+	if (depth > 8)
+		return null;
+
+	let level = 0;
+	let end = -1;
+	for (let i = start + 3; i < value.length; i += 1) {
+		if (value[i] === '(')
+			level += 1;
+		else if (value[i] === ')' && --level === 0) {
+			end = i;
+			break;
+		}
+	}
+	if (end < 0)
+		return null;
+
+	const inner = value.slice(start + 4, end);
+	const comma = inner.indexOf(',');
+	const name = (comma < 0 ? inner : inner.slice(0, comma)).trim();
+	const fallback = comma < 0 ? '' : inner.slice(comma + 1).trim();
+
+	let replacement = name.startsWith('--') ? lookup(name).trim() : '';
+	if (replacement === '')
+		replacement = fallback;
+	if (replacement === '')
+		return null;
+
+	const resolved = resolveAt(replacement, lookup, depth + 1);
+	const rest = resolveAt(value.slice(end + 1), lookup, depth);
+	if (resolved === null || rest === null)
+		return null;
+	return value.slice(0, start) + resolved + rest;
+}

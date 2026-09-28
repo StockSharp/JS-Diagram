@@ -100,3 +100,13 @@ test('a subtitle makes the node, and so the picture, taller', () => {
     const height = (svg: string): number => Number(/<svg[^>]*height="([\d.]+)"/.exec(svg)?.[1] ?? '0');
     assert.ok(height(titled) > height(plain), `${height(titled)} is not taller than ${height(plain)}`);
 });
+
+test('a colour given as a custom property falls back to what it names, since there is no page to ask', () => {
+    const svg = renderDiagramSvg(createDiagramDocument({
+        nodes: [{ id: 'a', name: 'A', color: 'var(--ss-red, #c0392b)', border: 'var(--ss-edge)' }],
+    }));
+
+    assert.match(svg, /fill="#c0392b"/);
+    assert.match(svg, /stroke="#8c8c8c"/);
+    assert.equal(svg.includes('var('), false);
+});

@@ -437,6 +437,13 @@ export declare function readableTextOn(fill: string): string;
 export declare function readableOutlineOn(surface: string): string;
 export declare function legibleOn(color: string, background: string): string;
 export declare function cappedLightness(color: string, maxLightness: number): string;
+/**
+ * Replaces every var(--name) or var(--name, fallback) in a CSS value with what `lookup` returns for the
+ * name, or with the fallback when the name is unset. Nested references resolve too, up to a fixed depth
+ * that also stops a cycle. Null when a reference resolves to nothing and names no fallback: the caller
+ * knows which default suits the slot, this does not.
+ */
+export declare function resolveCssVariables(value: string, lookup: (name: string) => string): string | null;
 
 // FILE: core/action-registry.d.ts
 export interface DiagramAction<TId extends string, TContext> {
