@@ -41,6 +41,12 @@ export interface DiagramOptions {
     gridSnap?: boolean;
     /** Positive world-space grid step. Defaults to 28. */
     gridSize?: number;
+    /**
+     * Leave page scrolling to the page: a plain wheel scrolls it and only Ctrl/Meta+wheel zooms, and a
+     * one-finger vertical swipe scrolls it on touch screens. Defaults to false, where the diagram keeps
+     * every wheel and touch gesture for itself - right for an editor, wrong for a picture on a long page.
+     */
+    pageScroll?: boolean;
 }
 
 export interface DiagramGridSettings {

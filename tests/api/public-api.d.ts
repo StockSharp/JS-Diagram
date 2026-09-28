@@ -72,6 +72,12 @@ export interface DiagramOptions {
     gridSnap?: boolean;
     /** Tint for a zone that names no colour of its own. */
     zoneColor?: string;
+    /**
+     * Leave page scrolling to the page: a plain wheel scrolls it and only Ctrl/Meta+wheel zooms, and a
+     * one-finger vertical swipe scrolls it on touch screens. Defaults to false, where the canvas keeps
+     * every wheel and touch gesture for itself.
+     */
+    pageScroll?: boolean;
     /** Positive world-space grid step. Defaults to 28. */
     gridSize?: number;
     /** Optional explicit socket-type → colour map; unknown types hash to a hue. */
@@ -296,6 +302,9 @@ export declare class Diagram {
     on<K extends EvName>(ev: K, h: (p: DiagramEvents[K]) => void): () => void;
     setLinkValidator(fn: LinkValidator | null): void;
     setGridSnap(enabled: boolean, size?: number): void;
+    /** See DiagramOptions.pageScroll. */
+    setPageScroll(enabled: boolean): void;
+    isPageScrollEnabled(): boolean;
     getGridSnap(): {
         enabled: boolean;
         size: number;
@@ -810,6 +819,12 @@ export interface DiagramOptions {
     gridSnap?: boolean;
     /** Positive world-space grid step. Defaults to 28. */
     gridSize?: number;
+    /**
+     * Leave page scrolling to the page: a plain wheel scrolls it and only Ctrl/Meta+wheel zooms, and a
+     * one-finger vertical swipe scrolls it on touch screens. Defaults to false, where the diagram keeps
+     * every wheel and touch gesture for itself - right for an editor, wrong for a picture on a long page.
+     */
+    pageScroll?: boolean;
 }
 export interface DiagramGridSettings {
     enabled: boolean;
@@ -1163,6 +1178,9 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     worldToView(x: number, y: number): DiagramPoint;
     setGridSnap(enabled: boolean, size?: number): void;
     getGridSnap(): DiagramSnapshot<DiagramGridSettings>;
+    /** See DiagramOptions.pageScroll. */
+    setPageScroll(enabled: boolean): void;
+    isPageScrollEnabled(): boolean;
     nudgeSelection(dx: number, dy: number): boolean;
     addLink(link: Link): boolean;
     validateLink(link: Link, excludeLinkId?: string): LinkValidationResult;

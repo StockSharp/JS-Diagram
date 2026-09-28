@@ -3912,6 +3912,60 @@ test('a zone caption taller than its zone still lands inside the content frame',
     assert.ok(height >= 21, `the caption of a thin zone is cut off: the export is only ${height}px tall`);
 });
 
+function wheel(init: Record<string, unknown>): { event: Record<string, unknown>; prevented: () => boolean } {
+    let prevented = false;
+    return {
+        event: { deltaY: 120, clientX: 400, clientY: 240, ctrlKey: false, metaKey: false, preventDefault: () => { prevented = true; }, ...init },
+        prevented: () => prevented,
+    };
+}
+
+test('by default the wheel zooms the diagram and the canvas keeps every touch gesture', () => {
+    const { diagram, host } = makeDiagram();
+    diagram.load([source, sink], []);
+    assert.equal(host.canvas!.style.touchAction, 'none');
+    assert.equal(diagram.isPageScrollEnabled(), false);
+
+    const before = diagram.getViewState().zoom;
+    const plain = wheel({});
+    host.canvas!.dispatch('wheel', plain.event);
+    assert.equal(plain.prevented(), true);
+    assert.notEqual(diagram.getViewState().zoom, before);
+});
+
+test('with page scroll the plain wheel scrolls the page and only Ctrl/Meta+wheel zooms', () => {
+    installDom();
+    const host = new FakeHost();
+    const diagram = new Diagram({ host: host as unknown as HTMLElement, pageScroll: true });
+    diagram.load([source, sink], []);
+    assert.equal(diagram.isPageScrollEnabled(), true);
+    // The browser keeps vertical panning, so a one-finger swipe scrolls the page.
+    assert.equal(host.canvas!.style.touchAction, 'pan-y');
+
+    const before = diagram.getViewState().zoom;
+    const plain = wheel({});
+    host.canvas!.dispatch('wheel', plain.event);
+    assert.equal(plain.prevented(), false, 'a plain wheel over the diagram must stay with the page');
+    assert.equal(diagram.getViewState().zoom, before);
+
+    const withCtrl = wheel({ ctrlKey: true });
+    host.canvas!.dispatch('wheel', withCtrl.event);
+    assert.equal(withCtrl.prevented(), true);
+    const zoomed = diagram.getViewState().zoom;
+    assert.notEqual(zoomed, before);
+
+    const withMeta = wheel({ metaKey: true });
+    host.canvas!.dispatch('wheel', withMeta.event);
+    assert.equal(withMeta.prevented(), true);
+    assert.notEqual(diagram.getViewState().zoom, zoomed);
+
+    diagram.setPageScroll(false);
+    assert.equal(host.canvas!.style.touchAction, 'none');
+    const after = wheel({});
+    host.canvas!.dispatch('wheel', after.event);
+    assert.equal(after.prevented(), true);
+});
+
 function withHostTokens(host: FakeHost, tokens: Record<string, string>): void {
     Object.assign(globalThis, {
         getComputedStyle: (element: unknown) => ({

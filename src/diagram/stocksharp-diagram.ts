@@ -131,6 +131,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
             typeColors: this.portTypeColors(),
             gridSnap: options.gridSnap ?? true,
             gridSize: options.gridSize,
+            pageScroll: options.pageScroll ?? false,
         });
         this.fullscreenButtonVisible = options.showFullscreenButton ?? true;
         this.fullscreenLabels = options.fullscreenLabels ?? null;
@@ -226,6 +227,15 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 
     getGridSnap(): DiagramSnapshot<DiagramGridSettings> {
         return this.canvas.getGridSnap();
+    }
+
+    /** See DiagramOptions.pageScroll. */
+    setPageScroll(enabled: boolean): void {
+        this.canvas.setPageScroll(enabled);
+    }
+
+    isPageScrollEnabled(): boolean {
+        return this.canvas.isPageScrollEnabled();
     }
 
     nudgeSelection(dx: number, dy: number): boolean {

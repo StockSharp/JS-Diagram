@@ -117,6 +117,12 @@ export interface DiagramOptions {
     gridSnap?: boolean;
     /** Tint for a zone that names no colour of its own. */
     zoneColor?: string;
+    /**
+     * Leave page scrolling to the page: a plain wheel scrolls it and only Ctrl/Meta+wheel zooms, and a
+     * one-finger vertical swipe scrolls it on touch screens. Defaults to false, where the canvas keeps
+     * every wheel and touch gesture for itself.
+     */
+    pageScroll?: boolean;
     /** Positive world-space grid step. Defaults to 28. */
     gridSize?: number;
     /** Optional explicit socket-type → colour map; unknown types hash to a hue. */
@@ -618,6 +624,7 @@ export class Diagram {
 
     private validator: LinkValidator | null = null;
     private handlers = new Map<EvName, Set<(p: never) => void>>();
+    private pageScroll: boolean;
     // Computed style of the host, read at most once per frame: colours written as var(--token)
     // resolve against it, so a frame drawn after a theme switch picks up the new values.
     private hostStyle: CSSStyleDeclaration | null = null;
@@ -629,6 +636,7 @@ export class Diagram {
         if (opts.typeColors !== undefined) this.setTypeColorsInternal(opts.typeColors);
         this.host = opts.host;
         this.gridSnapEnabled = opts.gridSnap ?? false;
+        this.pageScroll = opts.pageScroll ?? false;
         this.gridSize = this.normalizeGridSize(opts.gridSize ?? DEFAULT_GRID_SIZE);
         this.history = new DiagramCommandHistory(() => {
             // The gated values, not the raw stack: setInteractionPermissions and setReadOnly
@@ -640,9 +648,9 @@ export class Diagram {
         this.canvas.style.display = 'block';
         this.canvas.tabIndex = 0;            // focusable → key events
         this.canvas.style.outline = 'none';
-        // Eat browser-native touch gestures (page scroll / pinch-zoom) so
-        // fingers actually drive our pan/zoom on mobile instead of the page.
-        this.canvas.style.touchAction = 'none';
+        // Eat browser-native touch gestures (page scroll / pinch-zoom) so fingers actually drive our
+        // pan/zoom on mobile instead of the page - unless the page asked to keep its scrolling.
+        this.applyTouchAction();
         // No OS text-selection on long-press (would pop the iOS magnifier
         // and select node/link captions instead of firing our menu).
         this.canvas.style.userSelect = 'none';
@@ -690,6 +698,17 @@ export class Diagram {
         this.gridSnapEnabled = enabled;
         this.gridSize = nextSize;
         this.scheduleDraw();
+    }
+    /** See DiagramOptions.pageScroll. */
+    setPageScroll(enabled: boolean): void {
+        this.pageScroll = enabled;
+        this.applyTouchAction();
+    }
+    isPageScrollEnabled(): boolean { return this.pageScroll; }
+    // pan-y hands a vertical swipe to the browser, which scrolls the page; a horizontal one and a
+    // two-finger pinch still reach the canvas.
+    private applyTouchAction(): void {
+        this.canvas.style.touchAction = this.pageScroll ? 'pan-y' : 'none';
     }
     getGridSnap(): { enabled: boolean; size: number } {
         return { enabled: this.gridSnapEnabled, size: this.gridSize };
@@ -2714,6 +2733,8 @@ export class Diagram {
         this.listen(window, 'pointerup', finish);
         this.listen(window, 'pointercancel', finish);
         this.listen(this.canvas, 'wheel', (e) => {
+            // Ctrl+wheel is also what a trackpad pinch arrives as, so zoom stays one gesture away.
+            if (this.pageScroll && !e.ctrlKey && !e.metaKey) return;
             e.preventDefault();
             const [sx, sy] = localXY(e);
             const [wx, wy] = this.toWorld(sx, sy);
