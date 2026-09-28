@@ -70,3 +70,33 @@ test('the frame follows the content and the caller can pad it', () => {
     assert.ok(width(tight) > 0, 'a diagram with two nodes cannot be zero wide');
     assert.ok(width(padded) > width(tight), 'padding has to reach the frame');
 });
+
+// An architecture drawing rendered on a server has to carry the same second lines, labels and zones as
+// the one on the page.
+test('a subtitle, a link label and a zone all reach the headless picture', () => {
+    const drawing = createDiagramDocument({
+        nodes: [
+            { id: 'gate', name: 'Gateway', subtitle: 'FIX / REST', x: 0, y: 0, outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'core', name: 'Matching', x: 400, y: 0, inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [{ from: { nodeId: 'gate', portId: 'out' }, to: { nodeId: 'core', portId: 'in' }, label: 'SBE' }],
+        zones: [{ id: 'colo', name: 'Colocation', x: -300, y: -200, width: 1200, height: 600 }],
+    });
+
+    const svg = renderDiagramSvg(drawing, { padding: 0 });
+    assert.match(svg, />FIX \/ REST<\/text>/);
+    assert.match(svg, />SBE<\/text>/);
+    assert.match(svg, />Colocation<\/text>/);
+
+    const width = Number(/<svg[^>]*width="([\d.]+)"/.exec(svg)?.[1]);
+    const height = Number(/<svg[^>]*height="([\d.]+)"/.exec(svg)?.[1]);
+    assert.ok(width >= 1200 && height >= 600, `the frame is ${width}x${height} and cuts the zone off`);
+});
+
+test('a subtitle makes the node, and so the picture, taller', () => {
+    const plain = renderDiagramSvg(createDiagramDocument({ nodes: [{ id: 'a', name: 'A' }] }), { padding: 0 });
+    const titled = renderDiagramSvg(createDiagramDocument({ nodes: [{ id: 'a', name: 'A', subtitle: 'second line' }] }), { padding: 0 });
+
+    const height = (svg: string): number => Number(/<svg[^>]*height="([\d.]+)"/.exec(svg)?.[1] ?? '0');
+    assert.ok(height(titled) > height(plain), `${height(titled)} is not taller than ${height(plain)}`);
+});

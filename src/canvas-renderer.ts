@@ -60,6 +60,8 @@ export interface DiagramNodeInit {
     id?: string;
     typeId?: string;
     name: string;
+    /** Smaller second line under the name. */
+    subtitle?: string;
     description?: string;
     groupName?: string;
     color?: string;
@@ -90,6 +92,8 @@ export interface LinkInit {
     toPort: string;
     /** Solid unless the link is one that may not be there - see DiagramLinkStyle. */
     style?: DiagramLinkStyle;
+    /** Short text drawn at the middle of the link. */
+    label?: string;
     metadata?: JsonObject;
 }
 
@@ -102,7 +106,7 @@ export interface DiagramSnapshot {
     // Endpoints alone made the snapshot lossy: a save()/load() round-trip dropped every link's
     // identity, style and metadata, and the links carried in loadFinished / undoRequested /
     // redoRequested arrived with an empty id, so selectLink(payload.link.id) matched nothing.
-    links: Array<Required<Pick<LinkInit, 'id' | 'from' | 'fromPort' | 'to' | 'toPort' | 'style'>> & Pick<LinkInit, 'metadata'>>;
+    links: Array<Required<Pick<LinkInit, 'id' | 'from' | 'fromPort' | 'to' | 'toPort' | 'style'>> & Pick<LinkInit, 'label' | 'metadata'>>;
 }
 
 export interface DiagramOptions {
@@ -360,6 +364,7 @@ export class NodeModel {
     id: string;
     typeId: string;
     name: string;
+    subtitle: string;
     description: string;
     groupName: string;
     color: string;
@@ -385,6 +390,7 @@ export class NodeModel {
         this.id = id;
         this.typeId = init.typeId ?? id;
         this.name = init.name;
+        this.subtitle = init.subtitle ?? '';
         this.description = init.description ?? '';
         this.groupName = init.groupName ?? 'Common';
         this.color = init.color ?? '#d7d7d7';
@@ -411,6 +417,7 @@ export class NodeModel {
             id: this.id,
             typeId: this.typeId,
             name: this.name,
+            ...(this.subtitle === '' ? {} : { subtitle: this.subtitle }),
             description: this.description,
             groupName: this.groupName,
             color: this.color,
@@ -444,6 +451,7 @@ export class LinkModel {
         id: string = '',
         metadata?: JsonObject,
         public style: DiagramLinkStyle = 'solid',
+        public label: string = '',
     ) {
         this.id = id;
         this.metadata = copyJsonObject(metadata);
@@ -458,6 +466,7 @@ export class LinkModel {
             to: this.to,
             toPort: this.toPort,
             style: this.style,
+            ...(this.label === '' ? {} : { label: this.label }),
             metadata: copyJsonObject(this.metadata),
         };
     }
@@ -479,6 +488,12 @@ const INTRO_MS = 520;        // entrance animation duration
 const INTRO_RISE = 70;       // px the scheme rises from below
 const ERROR_FLASH_MS = 1100;
 const ERROR_RED = '#f6465d';
+const TITLE_FONT = '600 12px Segoe UI, Tahoma, sans-serif';
+const SUBTITLE_FONT = '11px Segoe UI, Tahoma, sans-serif';
+const SUBTITLE_MIN_H = 62;   // body height that fits a name and a subtitle line
+const LINK_LABEL_FONT = '600 10px Segoe UI, Tahoma, sans-serif';
+const ZONE_CAPTION_TOP = 9;  // caption offset inside the zone's top-left corner
+const ZONE_CAPTION_H = 14;
 const ERROR_BACKGROUND = '#7d2632';
 
 const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
@@ -875,7 +890,7 @@ export class Diagram {
             this.emit('linkValidation', { fromNode: fn, from: fp, toNode: tn, to: tp, ...validation });
             if (!validation.allowed) return false;
         }
-        const link = new LinkModel(init.from, init.fromPort, init.to, init.toPort, init.id ?? this.nextLinkId(), init.metadata, init.style ?? 'solid');
+        const link = new LinkModel(init.from, init.fromPort, init.to, init.toPort, init.id ?? this.nextLinkId(), init.metadata, init.style ?? 'solid', init.label ?? '');
         if (this.links.some((l) => l.id === link.id)) return false;
         this.links.splice(clamp(Math.trunc(index), 0, this.links.length), 0, link);
         this.emit('linkAdded', { link });
@@ -1162,10 +1177,11 @@ export class Diagram {
 
     updateNode(
         nodeId: string,
-        patch: Partial<Pick<DiagramNodeInit, 'name' | 'description' | 'color' | 'border' | 'message' | 'openAction'>>,
+        patch: Partial<Pick<DiagramNodeInit, 'name' | 'subtitle' | 'description' | 'color' | 'border' | 'message' | 'openAction'>>,
     ): boolean {
         return this.updateNodeState(nodeId, 'update node', (node) => {
             if (patch.name !== undefined) node.name = patch.name;
+            if (patch.subtitle !== undefined) node.subtitle = patch.subtitle;
             if (patch.description !== undefined) node.description = patch.description;
             if (patch.color !== undefined) node.color = patch.color;
             if (patch.border !== undefined) node.border = patch.border;
@@ -1211,6 +1227,7 @@ export class Diagram {
         const restored = new NodeModel(snapshot, nodeId);
         node.typeId = restored.typeId;
         node.name = restored.name;
+        node.subtitle = restored.subtitle;
         node.description = restored.description;
         node.groupName = restored.groupName;
         node.color = restored.color;
@@ -1242,6 +1259,10 @@ export class Diagram {
         return true;
     }
     load(nodes: DiagramNodeInit[], links: LinkInit[]): void {
+        this.loadModel(nodes, links, []);
+    }
+    // Zones are placed before the view is fitted, so the first frame frames them too.
+    private loadModel(nodes: DiagramNodeInit[], links: LinkInit[], zones: readonly DiagramDocumentZone[]): void {
         this.clear();
         this.idSeq = 1;
         this.linkSeq = 1;
@@ -1276,9 +1297,10 @@ export class Diagram {
             if (this.links.some((existing) => existing.id === id)) {
                 throw new Error(`ssdiagram: duplicate link id "${id}"`);
             }
-            const model = new LinkModel(link.from, link.fromPort, link.to, link.toPort, id, link.metadata, link.style ?? 'solid');
+            const model = new LinkModel(link.from, link.fromPort, link.to, link.toPort, id, link.metadata, link.style ?? 'solid', link.label ?? '');
             if (!this.links.some((existing) => existing.key() === model.key())) this.links.push(model);
         }
+        this.zones = zones.map((zone) => ({ ...zone, metadata: copyJsonObject(zone.metadata) }));
         for (const node of this.nodes) {
             if (node.loadError.length === 0) continue;
             const state = createDiagramNodeRuntimeState();
@@ -1301,6 +1323,7 @@ export class Diagram {
                 to: l.to,
                 toPort: l.toPort,
                 style: l.style,
+                ...(l.label === '' ? {} : { label: l.label }),
                 metadata: copyJsonObject(l.metadata),
             })),
         };
@@ -1308,7 +1331,7 @@ export class Diagram {
 
     loadDocument(source: DiagramDocument | string): void {
         const document = parseDiagramDocument(source);
-        this.load(
+        this.loadModel(
             document.nodes,
             document.links.map((link) => ({
                 id: link.id,
@@ -1317,10 +1340,11 @@ export class Diagram {
                 to: link.to.nodeId,
                 toPort: link.to.portId,
                 style: link.style,
+                label: link.label,
                 metadata: link.metadata,
             })),
+            document.zones,
         );
-        this.zones = document.zones.map((zone) => ({ ...zone, metadata: copyJsonObject(zone.metadata) }));
         this.documentMetadata = copyJsonObject(document.metadata);
     }
 
@@ -1332,6 +1356,7 @@ export class Diagram {
                 from: { nodeId: link.from, portId: link.fromPort },
                 to: { nodeId: link.to, portId: link.toPort },
                 style: link.style,
+                label: link.label,
                 metadata: link.metadata,
             })),
             zones: this.zones.map((zone) => ({ ...zone, metadata: copyJsonObject(zone.metadata) })),
@@ -1801,12 +1826,21 @@ export class Diagram {
         if (t.overviewViewportFill !== undefined) this.opts.overviewViewportFill = t.overviewViewportFill;
         this.scheduleDraw();
     }
+    // Zones count: fitting or exporting only the nodes cut off the places they sit in, captions
+    // included. A caption that is taller than its zone still has to fit.
     private graphBounds(): { minX: number; minY: number; maxX: number; maxY: number } | null {
-        if (this.nodes.length === 0) return null;
+        if (this.nodes.length === 0 && this.zones.length === 0) return null;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         for (const n of this.nodes) {
             minX = Math.min(minX, n.x); minY = Math.min(minY, n.y);
             maxX = Math.max(maxX, n.x + n.w); maxY = Math.max(maxY, n.y + n.h);
+        }
+        for (const zone of this.zones) {
+            const bottom = zone.name.length > 0
+                ? Math.max(zone.height, ZONE_CAPTION_TOP + ZONE_CAPTION_H)
+                : zone.height;
+            minX = Math.min(minX, zone.x - 1); minY = Math.min(minY, zone.y - 1);
+            maxX = Math.max(maxX, zone.x + zone.width + 1); maxY = Math.max(maxY, zone.y + bottom + 1);
         }
         return { minX, minY, maxX, maxY };
     }
@@ -1861,12 +1895,17 @@ export class Diagram {
     // ---- geometry ---------------------------------------------------
     private layoutNode(n: NodeModel): void {
         const ctx = this.ctx;
-        ctx.font = '600 12px Segoe UI, Tahoma, sans-serif';
+        ctx.font = TITLE_FONT;
         const titleW = ctx.measureText(n.name).width;
+        let subtitleW = 0;
+        if (n.subtitle.length > 0) {
+            ctx.font = SUBTITLE_FONT;
+            subtitleW = ctx.measureText(n.subtitle).width;
+        }
         const rows = Math.max(n.inPorts.length, n.outPorts.length, 1);
-        // Node sizing: min 170 wide, height grows by rows.
-        n.w = Math.max(170, Math.ceil(titleW) + 28);
-        n.h = Math.max(48, rows * PORT_ROW_H + 16);
+        // Node sizing: min 170 wide, height grows by rows; a subtitle adds a second text line.
+        n.w = Math.max(170, Math.ceil(titleW) + 28, Math.ceil(subtitleW) + 28);
+        n.h = Math.max(n.subtitle.length > 0 ? SUBTITLE_MIN_H : 48, rows * PORT_ROW_H + 16);
         // Each side's port stack is vertically centred; the socket
         // square sits OUTSIDE the body (its inner edge flush with the
         // node border).
@@ -2241,6 +2280,7 @@ export class Diagram {
                         // The clipboard is built from saveDocument(), so it carries the style;
                         // rebuilding without it silently turned every pasted dashed link solid.
                         style: l.style,
+                        label: l.label,
                         metadata: l.metadata,
                     });
             }
@@ -2837,6 +2877,7 @@ export class Diagram {
         // Links next. Each link jumps over the verticals of the links
         // drawn before it (deterministic bridge — Link.JumpOver parity).
         const prior: Seg[] = [];   // segments of links already drawn
+        const labels: Array<{ pts: number[][]; text: string; color: string }> = [];
         const hoveredNode = this.hoverPort?.node ?? this.hoverNode;
         for (const l of this.links) {
             const a = this.endpoint(l, 'from');
@@ -2857,6 +2898,7 @@ export class Diagram {
             const pts = this.routeLink(a, b, new Set([l.from, l.to]));
             this.strokeRoute(pts, color, width, prior, l.style);
             this.drawArrow(pts, color);
+            if (l.label.length > 0) labels.push({ pts, text: l.label, color });
             for (let k = 1; k < pts.length; k += 1) {
                 const [x1, y1] = pts[k - 1];
                 const [x2, y2] = pts[k];
@@ -2864,6 +2906,8 @@ export class Diagram {
                 else if (y1 === y2 && x1 !== x2) prior.push({ h: true, c: y1, a: Math.min(x1, x2), b: Math.max(x1, x2) });
             }
         }
+        // After every wire, so no later wire runs across a label; before the nodes, which stay on top.
+        for (const label of labels) this.drawLinkLabel(label.pts, label.text, label.color, background);
         if (options.transient && (this.linking !== null || this.relinking !== null)) this.drawPendingLink();
         this.portFeed = this.feedTypes();
         for (const n of this.nodes) this.drawNode(n, options.selection && this.selectedNodes.has(n), options);
@@ -3029,12 +3073,12 @@ export class Diagram {
             ctx.save();
             ctx.globalAlpha = 0.75;
             ctx.fillStyle = tint;
-            ctx.font = '600 12px Segoe UI, Tahoma, sans-serif';
+            ctx.font = TITLE_FONT;
             ctx.textAlign = 'left';
             ctx.textBaseline = 'top';
             // Inside the top-left corner: a caption outside the box would collide with whatever
             // sits above it, and the corner is the one spot a rectangle always has to spare.
-            ctx.fillText(zone.name, zone.x + 12, zone.y + 9, Math.max(0, zone.width - 24));
+            ctx.fillText(zone.name, zone.x + 12, zone.y + ZONE_CAPTION_TOP, Math.max(0, zone.width - 24));
             ctx.restore();
         }
     }
@@ -3070,8 +3114,9 @@ export class Diagram {
         const runtime = options.runtime ? getJsonKey(this.runtimeState.nodes, n.id) : undefined;
         const active = options.runtime
             && (this.runtimeState.activeNodeId === n.id || runtime?.active === true);
+        const fill = n.color;
         roundRect(ctx, n.x, n.y, n.w, n.h, 6);
-        ctx.fillStyle = hasLoadError ? ERROR_BACKGROUND : active ? '#ffd1dc' : n.color;
+        ctx.fillStyle = hasLoadError ? ERROR_BACKGROUND : active ? '#ffd1dc' : fill;
         ctx.fill();
         ctx.lineWidth = selected ? 2 : 1.5;
         ctx.strokeStyle = selected ? this.selectionColor() : n.border;
@@ -3107,13 +3152,25 @@ export class Diagram {
         // takes its colour from the fill it sits on: that fill comes from the
         // scheme, so a node may well be darker than the title used to assume.
         const titleShift = n.icon ? iconW + 4 : 0;
+        const textX = n.x + titleShift + (n.w - titleShift) / 2;
+        const textWidth = n.w - titleShift - 14;
         ctx.fillStyle = hasLoadError
             ? '#ffffff'
-            : readableTextOn(active ? '#ffd1dc' : n.color);
-        ctx.font = '600 12px Segoe UI, Tahoma, sans-serif';
+            : readableTextOn(active ? '#ffd1dc' : fill);
+        ctx.font = TITLE_FONT;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(n.name, n.x + titleShift + (n.w - titleShift) / 2, n.y + n.h / 2, n.w - titleShift - 14);
+        if (n.subtitle.length === 0) {
+            ctx.fillText(n.name, textX, n.y + n.h / 2, textWidth);
+        } else {
+            // Two lines centred as a pair: the name above, the subtitle smaller and muted below.
+            ctx.fillText(n.name, textX, n.y + n.h / 2 - 8, textWidth);
+            ctx.save();
+            ctx.globalAlpha *= 0.72;
+            ctx.font = SUBTITLE_FONT;
+            ctx.fillText(n.subtitle, textX, n.y + n.h / 2 + 9, textWidth);
+            ctx.restore();
+        }
         for (const p of n.inPorts) this.drawPort(n, p, options);
         for (const p of n.outPorts) this.drawPort(n, p, options);
     }
@@ -3241,6 +3298,27 @@ export class Diagram {
         ctx.beginPath();
         ctx.moveTo(0, 0); ctx.lineTo(-9, -4.5); ctx.lineTo(-9, 4.5); ctx.closePath();
         ctx.fill();
+        ctx.restore();
+    }
+    // A plate of the canvas colour under the text, edged in the wire's colour: the label reads the same
+    // whatever the wire crosses, and still says which wire it belongs to.
+    private drawLinkLabel(pts: number[][], text: string, color: string, background: string): void {
+        const [x, y] = pathMidpoint(pts);
+        const ctx = this.ctx;
+        ctx.save();
+        ctx.font = LINK_LABEL_FONT;
+        const w = Math.ceil(ctx.measureText(text).width) + 12;
+        const h = 16;
+        roundRect(ctx, x - w / 2, y - h / 2, w, h, h / 2);
+        ctx.fillStyle = background;
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = color;
+        ctx.stroke();
+        ctx.fillStyle = readableTextOn(background);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, x, y);
         ctx.restore();
     }
     private drawSelectedLinkEndpoints(): void {
@@ -3408,6 +3486,25 @@ function roundRect(ctx: DrawSurface, x: number, y: number, w: number, h: number,
 // a 3-segment mid-X elbow. Backward/too-close: a 5-segment detour that
 // leaves the source rightward and re-enters the target from the left
 // (AvoidsNodes-style, never a diagonal).
+/** The point halfway along a polyline, measured by length rather than by vertex count. */
+function pathMidpoint(pts: number[][]): [number, number] {
+    let total = 0;
+    for (let i = 1; i < pts.length; i += 1) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+    let remaining = total / 2;
+    for (let i = 1; i < pts.length; i += 1) {
+        const [x1, y1] = pts[i - 1];
+        const [x2, y2] = pts[i];
+        const length = Math.hypot(x2 - x1, y2 - y1);
+        if (length > 0 && remaining <= length) {
+            const t = remaining / length;
+            return [x1 + (x2 - x1) * t, y1 + (y2 - y1) * t];
+        }
+        remaining -= length;
+    }
+    const last = pts[pts.length - 1];
+    return [last[0], last[1]];
+}
+
 function route(a: [number, number], b: [number, number]): number[][] {
     const [ax, ay] = a;
     const [bx, by] = b;

@@ -21,6 +21,8 @@ export interface DiagramNodeInit {
     id?: string;
     typeId?: string;
     name: string;
+    /** Smaller second line under the name. */
+    subtitle?: string;
     description?: string;
     groupName?: string;
     color?: string;
@@ -50,6 +52,8 @@ export interface LinkInit {
     toPort: string;
     /** Solid unless the link is one that may not be there - see DiagramLinkStyle. */
     style?: DiagramLinkStyle;
+    /** Short text drawn at the middle of the link. */
+    label?: string;
     metadata?: JsonObject;
 }
 export type DiagramNodeSnapshot = DiagramNodeInit & Required<Pick<DiagramNodeInit, 'id' | 'typeId' | 'name' | 'color' | 'border' | 'x' | 'y'>> & {
@@ -58,7 +62,7 @@ export type DiagramNodeSnapshot = DiagramNodeInit & Required<Pick<DiagramNodeIni
 };
 export interface DiagramSnapshot {
     nodes: DiagramNodeSnapshot[];
-    links: Array<Required<Pick<LinkInit, 'id' | 'from' | 'fromPort' | 'to' | 'toPort' | 'style'>> & Pick<LinkInit, 'metadata'>>;
+    links: Array<Required<Pick<LinkInit, 'id' | 'from' | 'fromPort' | 'to' | 'toPort' | 'style'>> & Pick<LinkInit, 'label' | 'metadata'>>;
 }
 export interface DiagramOptions {
     host: HTMLElement;
@@ -245,6 +249,7 @@ export declare class NodeModel {
     id: string;
     typeId: string;
     name: string;
+    subtitle: string;
     description: string;
     groupName: string;
     color: string;
@@ -277,9 +282,10 @@ export declare class LinkModel {
     to: string;
     toPort: string;
     style: DiagramLinkStyle;
+    label: string;
     readonly id: string;
     readonly metadata: JsonObject;
-    constructor(from: string, fromPort: string, to: string, toPort: string, id?: string, metadata?: JsonObject, style?: DiagramLinkStyle);
+    constructor(from: string, fromPort: string, to: string, toPort: string, id?: string, metadata?: JsonObject, style?: DiagramLinkStyle, label?: string);
     key(): string;
     toInit(): LinkInit & {
         id: string;
@@ -320,7 +326,7 @@ export declare class Diagram {
     updatePortType(nodeId: string, direction: PortDirection, portId: string, type: string): boolean;
     updatePort(nodeId: string, direction: PortDirection, portId: string, patch: PortUpdate): boolean;
     setNodePorts(nodeId: string, inPorts: readonly PortInit[], outPorts: readonly PortInit[]): boolean;
-    updateNode(nodeId: string, patch: Partial<Pick<DiagramNodeInit, 'name' | 'description' | 'color' | 'border' | 'message' | 'openAction'>>): boolean;
+    updateNode(nodeId: string, patch: Partial<Pick<DiagramNodeInit, 'name' | 'subtitle' | 'description' | 'color' | 'border' | 'message' | 'openAction'>>): boolean;
     setNodeParamValue(nodeId: string, name: string, value: string | undefined): boolean;
     setShowNodeMessages(show: boolean): void;
     load(nodes: DiagramNodeInit[], links: LinkInit[]): void;

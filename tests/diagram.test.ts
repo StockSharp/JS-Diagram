@@ -3782,3 +3782,132 @@ test('the control reports whether its menu is open', async () => {
 
     diagram.destroy();
 });
+
+// ---- architecture drawings: subtitle, link label, zones in the frame, page scroll, token colours ----
+
+test('a node subtitle is drawn under the name and the node grows to hold it', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'plain', name: 'Gateway', x: 0, y: 0 },
+            { id: 'titled', name: 'Gateway', subtitle: 'FIX / REST / WebSocket entry point for every client', x: 0, y: 200 },
+        ],
+    }));
+
+    const plain = diagram.findNode('plain')!;
+    const titled = diagram.findNode('titled')!;
+    assert.ok(titled.h > plain.h, `the subtitle needs a second line: ${titled.h} is not taller than ${plain.h}`);
+    // 51 characters at 7px each through the harness metrics, well past the 170px minimum.
+    assert.ok(titled.w >= 51 * 7, `the node has to be wide enough for its subtitle, got ${titled.w}`);
+
+    const frame = diagram.takeScreenshot({ includeGrid: false }) as unknown as FakeCanvas;
+    assert.ok(frame.drawnText.includes('FIX / REST / WebSocket entry point for every client'),
+        `the subtitle never reached the canvas, drew ${JSON.stringify(frame.drawnText)}`);
+    assert.equal(diagram.saveDocument().nodes[1].subtitle, 'FIX / REST / WebSocket entry point for every client');
+});
+
+test('a node subtitle survives undo of an unrelated node edit', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(createDiagramDocument({ nodes: [{ id: 'a', name: 'A', subtitle: 'kept' }] }));
+
+    diagram.updateNode('a', { name: 'Renamed' });
+    diagram.undo();
+
+    assert.equal(diagram.saveDocument().nodes[0].subtitle, 'kept');
+});
+
+function labelledDocument(label: string) {
+    return createDiagramDocument({
+        nodes: [
+            { id: 'a', name: 'A', x: 0, y: 0, outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', x: 400, y: 0, inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        links: [{ id: 'l', from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, label }],
+    });
+}
+
+test('a link label is drawn and round-trips through the canvas', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(labelledDocument('SBE'));
+
+    const frame = diagram.takeScreenshot({ includeGrid: false }) as unknown as FakeCanvas;
+    assert.ok(frame.drawnText.includes('SBE'), `the link label never reached the canvas, drew ${JSON.stringify(frame.drawnText)}`);
+    assert.equal(diagram.saveDocument().links[0].label, 'SBE');
+    assert.equal(diagram.save().links[0].label, 'SBE');
+});
+
+test('a link label sits at the middle of the routed path, on a plate of the canvas colour', () => {
+    const { diagram } = makeDiagram();
+    diagram.setTheme({ background: '#101820' });
+    diagram.loadDocument(labelledDocument('SBE'));
+
+    const svg = diagram.takeSvg({ scope: 'content', padding: 0 });
+    const label = /<path d="[^"]*" fill="([^"]+)"[^>]*\/><path d="[^"]*" fill="none"[^>]*\/><text x="([\d.-]+)" y="([\d.-]+)"[^>]*>SBE<\/text>/.exec(svg);
+    assert.ok(label !== null, `the label has to be drawn on a plate of its own, got: ${svg}`);
+    assert.equal(label[1], '#101820', 'the plate is the canvas colour, so the text reads wherever the wire runs');
+
+    const a = diagram.findNode('a')!;
+    const b = diagram.findNode('b')!;
+    const from = a.outPorts[0].cx;
+    const to = b.inPorts[0].cx;
+    assert.ok(Math.abs(Number(label[2]) - (from + to) / 2) < 1,
+        `a straight link between x=${from} and x=${to} puts its label at ${label[2]}, not at the middle`);
+    assert.ok(Math.abs(Number(label[3]) - a.outPorts[0].cy) < 1);
+});
+
+test('a pasted link keeps its label', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(labelledDocument('SBE'));
+    diagram.selectNodesById(['a', 'b']);
+    diagram.copySelection();
+    diagram.pasteSelection();
+
+    assert.deepEqual(diagram.saveDocument().links.map((link) => link.label), ['SBE', 'SBE']);
+});
+
+function zonedDocument() {
+    return createDiagramDocument({
+        nodes: [{ id: 'a', name: 'A', x: 0, y: 0 }],
+        zones: [{ id: 'z', name: 'Colocation', x: -400, y: -300, width: 1600, height: 1000 }],
+    });
+}
+
+test('zoomToFit keeps a zone larger than the nodes on screen', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(zonedDocument());
+
+    const [left, top] = diagram.worldToView(-400, -300);
+    const [right, bottom] = diagram.worldToView(1200, 700);
+    assert.ok(left >= 0 && top >= 0 && right <= 800 && bottom <= 480,
+        `the fitted view clips the zone: it spans ${left},${top} .. ${right},${bottom} of an 800x480 frame`);
+
+    diagram.setZoom(2);
+    diagram.zoomToFit();
+    const [again] = diagram.worldToView(-400, -300);
+    assert.ok(again >= 0, 'an explicit zoomToFit must frame the zone too');
+});
+
+test('a content export frames zones and their captions, not only nodes', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(zonedDocument());
+
+    const svg = diagram.takeSvg({ scope: 'content', padding: 10 });
+    const width = Number(/<svg[^>]*width="([\d.]+)"/.exec(svg)?.[1]);
+    const height = Number(/<svg[^>]*height="([\d.]+)"/.exec(svg)?.[1]);
+    assert.ok(width >= 1600 + 20 && height >= 1000 + 20, `the export is ${width}x${height}, smaller than the zone it has to show`);
+
+    const shot = diagram.takeScreenshot({ scope: 'content', padding: 10, pixelRatio: 1 }) as unknown as FakeCanvas;
+    assert.ok(shot.width >= 1620 && shot.height >= 1020, `the raster export is ${shot.width}x${shot.height}`);
+});
+
+test('a zone caption taller than its zone still lands inside the content frame', () => {
+    const { diagram } = makeDiagram();
+    diagram.loadDocument(createDiagramDocument({
+        zones: [{ id: 'z', name: 'Thin', x: 0, y: 0, width: 300, height: 4 }],
+    }));
+
+    const svg = diagram.takeSvg({ scope: 'content', padding: 0 });
+    const height = Number(/<svg[^>]*height="([\d.]+)"/.exec(svg)?.[1]);
+    // The caption starts 9px down and is 12px tall.
+    assert.ok(height >= 21, `the caption of a thin zone is cut off: the export is only ${height}px tall`);
+});
