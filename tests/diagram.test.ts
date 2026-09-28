@@ -4056,3 +4056,41 @@ test('a node tooltip names a type only when the node was given one', async () =>
     const typed = await tooltipOver('sma-1');
     assert.ok(typed.some((text) => text.includes('[SmaIndicator]')), `a real type is still named: ${JSON.stringify(typed)}`);
 });
+
+test('fullscreen gives every gesture to the diagram and page scroll returns when it ends', async () => {
+    installDom();
+    const { StockSharpCatalog, StockSharpDiagram } = await import('../src/index');
+    const host = new FakeHost();
+    const diagram = new StockSharpDiagram({
+        div: host as unknown as HTMLElement,
+        catalog: new StockSharpCatalog(),
+        pageScroll: true,
+    });
+    const canvas = host.canvas!;
+    assert.equal(canvas.style.touchAction, 'pan-y');
+
+    // Fullscreen covers the page, so there is nothing left to scroll: a plain wheel has to zoom and a
+    // one-finger swipe has to pan, or the one view made for exploring the diagram cannot be moved.
+    diagram.setFullscreenState(true);
+    assert.equal(canvas.style.touchAction, 'none');
+    const inFullscreen = wheel({});
+    canvas.dispatch('wheel', inFullscreen.event);
+    assert.equal(inFullscreen.prevented(), true, 'a plain wheel in fullscreen was left to a page that cannot scroll');
+    assert.equal(diagram.isPageScrollEnabled(), true, 'the setting itself is kept for when fullscreen ends');
+
+    diagram.setFullscreenState(false);
+    assert.equal(canvas.style.touchAction, 'pan-y');
+    const back = wheel({});
+    canvas.dispatch('wheel', back.event);
+    assert.equal(back.prevented(), false);
+
+    // Switched on while in fullscreen, page scroll waits for fullscreen to end.
+    diagram.setPageScroll(false);
+    diagram.setFullscreenState(true);
+    diagram.setPageScroll(true);
+    assert.equal(canvas.style.touchAction, 'none');
+    diagram.setFullscreenState(false);
+    assert.equal(canvas.style.touchAction, 'pan-y');
+
+    diagram.destroy();
+});

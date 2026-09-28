@@ -823,6 +823,7 @@ export interface DiagramOptions {
      * Leave page scrolling to the page: a plain wheel scrolls it and only Ctrl/Meta+wheel zooms, and a
      * one-finger vertical swipe scrolls it on touch screens. Defaults to false, where the diagram keeps
      * every wheel and touch gesture for itself - right for an editor, wrong for a picture on a long page.
+     * Fullscreen (see setFullscreenState) suspends it, since the diagram then covers the page.
      */
     pageScroll?: boolean;
 }
@@ -1180,6 +1181,7 @@ export declare class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     getGridSnap(): DiagramSnapshot<DiagramGridSettings>;
     /** See DiagramOptions.pageScroll. */
     setPageScroll(enabled: boolean): void;
+    /** The requested setting, which stays true while fullscreen suspends it. */
     isPageScrollEnabled(): boolean;
     nudgeSelection(dx: number, dy: number): boolean;
     addLink(link: Link): boolean;

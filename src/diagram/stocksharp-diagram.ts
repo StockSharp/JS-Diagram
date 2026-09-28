@@ -109,6 +109,8 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     private loading = false;
     private destroyed = false;
     private fullscreen = false;
+    // The requested setting; fullscreen suspends it without forgetting it.
+    private pageScroll: boolean;
     private fullscreenButtonVisible = true;
     private downloadButtonVisible = false;
     private exportEnabled = true;
@@ -127,12 +129,13 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
         this.overviewContainer = options.overviewContainer ?? null;
         this.zoomLabel = options.zoomLabel ?? null;
         this.clipboard = this.resolveClipboard(options.clipboard);
+        this.pageScroll = options.pageScroll ?? false;
         this.canvas = new CanvasDiagram({
             host: this.div,
             typeColors: this.portTypeColors(),
             gridSnap: options.gridSnap ?? true,
             gridSize: options.gridSize,
-            pageScroll: options.pageScroll ?? false,
+            pageScroll: this.pageScroll,
         });
         this.fullscreenButtonVisible = options.showFullscreenButton ?? true;
         this.fullscreenLabels = options.fullscreenLabels ?? null;
@@ -232,11 +235,18 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
 
     /** See DiagramOptions.pageScroll. */
     setPageScroll(enabled: boolean): void {
-        this.canvas.setPageScroll(enabled);
+        this.pageScroll = enabled;
+        this.applyPageScroll();
     }
 
+    /** The requested setting, which stays true while fullscreen suspends it. */
     isPageScrollEnabled(): boolean {
-        return this.canvas.isPageScrollEnabled();
+        return this.pageScroll;
+    }
+
+    // Fullscreen covers the page, so there is no page left to scroll and every gesture goes to the diagram.
+    private applyPageScroll(): void {
+        this.canvas.setPageScroll(this.pageScroll && !this.fullscreen);
     }
 
     nudgeSelection(dx: number, dy: number): boolean {
@@ -540,6 +550,7 @@ export class StockSharpDiagram extends EventEmitter<DiagramEvents> {
     setFullscreenState(fullscreen: boolean): void {
         if (this.fullscreen === fullscreen) return;
         this.fullscreen = fullscreen;
+        this.applyPageScroll();
         this.updateFullscreenButton();
         this.emit('fullscreenChanged', { fullscreen });
     }
