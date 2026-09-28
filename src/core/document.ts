@@ -132,10 +132,12 @@ export function parseDiagramDocument(source: string | unknown): DiagramDocument 
 function normalizeNode(value: unknown, path: string): DiagramDocumentNode {
     const input = requireStructure(value, path);
     const id = requireIdentifier(input.id, `${path}.id`);
+    const subtitle = requireOptionalText(input.subtitle, `${path}.subtitle`);
     return {
         id,
         typeId: requireIdentifier(input.typeId ?? id, `${path}.typeId`),
         name: requireString(input.name, `${path}.name`),
+        ...(subtitle === '' ? {} : { subtitle }),
         description: requireString(input.description ?? '', `${path}.description`),
         groupName: requireString(input.groupName ?? 'Common', `${path}.groupName`),
         x: requireFiniteNumber(input.x ?? 0, `${path}.x`),
@@ -193,13 +195,21 @@ function normalizeParameter(value: unknown, path: string): DiagramParameterSchem
 
 function normalizeLink(value: unknown, path: string): DiagramDocumentLink {
     const input = requireStructure(value, path);
+    const label = requireOptionalText(input.label, `${path}.label`);
     return {
         id: requireIdentifier(input.id, `${path}.id`),
         from: normalizeEndpoint(input.from, `${path}.from`),
         to: normalizeEndpoint(input.to, `${path}.to`),
         style: requireLinkStyle(input.style, `${path}.style`),
+        ...(label === '' ? {} : { label }),
         metadata: cloneJsonObject(input.metadata ?? {}, `${path}.metadata`),
     };
+}
+
+// Text a document may leave out. Absent, null and empty all mean "none", and none is written as
+// nothing at all, so a document that never used the field serializes exactly as it did before.
+function requireOptionalText(value: unknown, path: string): string {
+    return value === undefined || value === null ? '' : requireString(value, path);
 }
 
 // A style the caller misspelled is a drawing that quietly loses its meaning, so it is refused
@@ -251,6 +261,7 @@ function parseNode(value: unknown, path: string): DiagramDocumentNode {
         id: requireString(node.id, `${path}.id`),
         typeId: requireString(node.typeId, `${path}.typeId`),
         name: requireString(node.name, `${path}.name`),
+        subtitle: node.subtitle,
         description: requireString(node.description, `${path}.description`),
         groupName: requireString(node.groupName, `${path}.groupName`),
         x: requireNumber(node.x, `${path}.x`),
@@ -309,6 +320,7 @@ function parseLink(value: unknown, path: string): DiagramDocumentLink {
         from: parseEndpoint(link.from, `${path}.from`),
         to: parseEndpoint(link.to, `${path}.to`),
         style: link.style === undefined ? undefined : requireLinkStyle(link.style, `${path}.style`),
+        label: link.label,
         metadata: cloneJsonObject(link.metadata, `${path}.metadata`),
     }, path);
 }

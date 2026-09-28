@@ -459,3 +459,62 @@ test('createDiagramDocument rejects non-finite zone geometry, so a document it s
         + `"${reparseError === null ? '<parsed cleanly>' : reparseError.message}" - a save that cannot be opened`,
     );
 });
+
+// An architecture drawing names its boxes twice: what the thing is, and a line under it saying what
+// it does. The second line is optional, so documents written before it existed read exactly as before.
+test('a node subtitle survives a serialize and parse round trip', () => {
+    const document = createDiagramDocument({
+        nodes: [{ id: 'gate', name: 'Gateway', subtitle: 'FIX / REST / WebSocket' }],
+    });
+
+    assert.equal(document.nodes[0].subtitle, 'FIX / REST / WebSocket');
+    assert.equal(parseDiagramDocument(serializeDiagramDocument(document)).nodes[0].subtitle, 'FIX / REST / WebSocket');
+});
+
+test('a node without a subtitle writes none, so older documents keep their exact shape', () => {
+    const document = createDiagramDocument({ nodes: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B', subtitle: '' }] });
+
+    assert.equal('subtitle' in document.nodes[0], false);
+    assert.equal('subtitle' in document.nodes[1], false);
+    assert.equal(serializeDiagramDocument(document).includes('subtitle'), false);
+});
+
+test('a subtitle that is not text is refused with its path', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    assert.throws(() => createDiagramDocument({ nodes: [{ id: 'a', name: 'A', subtitle: 42 as any }] }),
+        (error: unknown) => error instanceof DiagramDocumentError && error.path === '$.nodes[0].subtitle');
+
+    const serialized = JSON.parse(serializeDiagramDocument(createDiagramDocument({ nodes: [{ id: 'a', name: 'A' }] })));
+    serialized.nodes[0].subtitle = ['x'];
+    assert.throws(() => parseDiagramDocument(serialized),
+        (error: unknown) => error instanceof DiagramDocumentError && error.path === '$.nodes[0].subtitle');
+});
+
+function labelledPair(label?: unknown): DiagramDocumentInput {
+    return {
+        nodes: [
+            { id: 'a', name: 'A', outPorts: [{ id: 'out', name: 'Out' }] },
+            { id: 'b', name: 'B', inPorts: [{ id: 'in', name: 'In' }] },
+        ],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        links: [{ id: 'l', from: { nodeId: 'a', portId: 'out' }, to: { nodeId: 'b', portId: 'in' }, label: label as any }],
+    };
+}
+
+test('a link label survives a serialize and parse round trip', () => {
+    const document = createDiagramDocument(labelledPair('SBE'));
+
+    assert.equal(document.links[0].label, 'SBE');
+    assert.equal(parseDiagramDocument(serializeDiagramDocument(document)).links[0].label, 'SBE');
+    assert.equal(cloneDiagramDocument(document).links[0].label, 'SBE');
+});
+
+test('a link without a label writes none', () => {
+    assert.equal('label' in createDiagramDocument(labelledPair()).links[0], false);
+    assert.equal('label' in createDiagramDocument(labelledPair('')).links[0], false);
+});
+
+test('a link label that is not text is refused with its path', () => {
+    assert.throws(() => createDiagramDocument(labelledPair(7)),
+        (error: unknown) => error instanceof DiagramDocumentError && error.path === '$.links[0].label');
+});

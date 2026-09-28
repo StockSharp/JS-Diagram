@@ -562,6 +562,11 @@ export interface DiagramDocumentNode {
     id: string;
     typeId: string;
     name: string;
+    /**
+     * Second, smaller line drawn under the name - what the element does, where the name says what it
+     * is. Absent rather than empty when there is none, so a document written without it keeps its shape.
+     */
+    subtitle?: string;
     description: string;
     groupName: string;
     x: number;
@@ -597,6 +602,8 @@ export interface DiagramDocumentLink {
     from: DiagramDocumentEndpoint;
     to: DiagramDocumentEndpoint;
     style: DiagramLinkStyle;
+    /** Short text drawn at the middle of the link, such as a protocol name. Absent when there is none. */
+    label?: string;
     metadata: JsonObject;
 }
 /**
