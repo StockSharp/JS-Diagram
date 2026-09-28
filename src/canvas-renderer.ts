@@ -3032,7 +3032,9 @@ export class Diagram {
             } else if (n.description.length > 0) {
                 text = n.description;
             } else {
-                text = n.typeId && n.typeId !== n.name ? `${n.name}   [${n.typeId}]` : n.name;
+                // A node given no type carries its id as one; an id is a key, not a word for the reader.
+                const typed = n.typeId.length > 0 && n.typeId !== n.name && n.typeId !== n.id;
+                text = typed ? `${n.name}   [${n.typeId}]` : n.name;
             }
         } else {
             return;

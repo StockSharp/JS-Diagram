@@ -4026,3 +4026,33 @@ test('an svg export carries the resolved colour, since a standalone file has no 
     assert.match(svg, /fill="#e0301e"/);
     assert.equal(svg.includes('var('), false);
 });
+
+test('a node tooltip names a type only when the node was given one', async () => {
+    const { diagram, host } = makeDiagram();
+    diagram.loadDocument(createDiagramDocument({
+        nodes: [
+            { id: 'traders', name: 'Трейдеры', x: 0, y: 0 },
+            { id: 'sma-1', typeId: 'SmaIndicator', name: 'SMA', x: 0, y: 200 },
+        ],
+    }));
+    const internals = diagram as unknown as { draw(): void };
+    const tooltipOver = async (nodeId: string): Promise<string[]> => {
+        const node = diagram.findNode(nodeId)!;
+        const [x, y] = diagram.worldToView(node.x + node.w / 2, node.y + node.h / 2);
+        host.canvas!.dispatch('pointermove', { clientX: x, clientY: y });
+        await wait(450);
+        host.canvas!.drawnText.length = 0;
+        internals.draw();
+        return [...host.canvas!.drawnText];
+    };
+
+    // Without a type of its own the node's id stands in for one, and that id is a key, not a word
+    // for a reader: on a translated page it would show up in English under every hovered node.
+    const untyped = await tooltipOver('traders');
+    assert.equal(untyped.some((text) => text.includes('[traders]')), false, `the id leaked into the tooltip: ${JSON.stringify(untyped)}`);
+    // Once on the node, once in the tooltip.
+    assert.equal(untyped.filter((text) => text === 'Трейдеры').length, 2, `no tooltip was drawn: ${JSON.stringify(untyped)}`);
+
+    const typed = await tooltipOver('sma-1');
+    assert.ok(typed.some((text) => text.includes('[SmaIndicator]')), `a real type is still named: ${JSON.stringify(typed)}`);
+});
